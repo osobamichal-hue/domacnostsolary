@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="cs">
   <head>
     <meta charset="UTF-8" />
@@ -39,10 +39,18 @@
         </div>
         <div class="summary-kpis stats-kpis">
           <div class="kpi"><span class="kpi-label">Výroba</span><span class="kpi-value" id="sProd">—</span></div>
-          <div class="kpi"><span class="kpi-label">Spotřeba</span><span class="kpi-value" id="sCons">—</span></div>
+          <div class="kpi"><span class="kpi-label">Celková spotřeba</span><span class="kpi-value" id="sCons">—</span></div>
+          <div class="kpi"><span class="kpi-label">Vlastní spotřeba (z FV)</span><span class="kpi-value" id="sSelf">—</span></div>
+          <div class="kpi"><span class="kpi-label">Dodávka do sítě</span><span class="kpi-value" id="sExport">—</span></div>
+          <div class="kpi"><span class="kpi-label">Odběr ze sítě</span><span class="kpi-value" id="sImport">—</span></div>
           <div class="kpi"><span class="kpi-label">Příjem</span><span class="kpi-value" id="sIncome">—</span></div>
           <div class="kpi"><span class="kpi-label">Vzorky</span><span class="kpi-value" id="sSamples">—</span></div>
         </div>
+      </section>
+
+      <section class="chart-section">
+        <h2 class="section-title">Poměr spotřeby: vlastní vs. síť</h2>
+        <canvas id="ratioChart" width="900" height="180"></canvas>
       </section>
 
       <section class="chart-section">

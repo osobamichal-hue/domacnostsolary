@@ -52,9 +52,9 @@ function formatKwh(v) {
   return `${Number(v).toFixed(2)} kWh`;
 }
 
-function formatEur(v) {
+function formatCzk(v) {
   if (v == null || Number.isNaN(v)) return "—";
-  return `${Number(v).toFixed(2)} €`;
+  return `${Number(v).toFixed(2)} Kč`;
 }
 
 function setFlowIntensity(paths, solarW, loadW, batW, gridW) {
@@ -207,15 +207,15 @@ function applyPayload(msg) {
 
   setFlowIntensity(paths, n.solar_w, n.load_w, n.battery_w, n.grid_w);
 
-  const feedIn = msg.feedInEurPerKwh ?? payload.feedInEurPerKwh;
+  const feedIn = msg.feedInCzkPerKwh ?? payload.feedInCzkPerKwh ?? msg.feedInEurPerKwh ?? payload.feedInEurPerKwh;
   const income =
     n.e_day_kwh != null && feedIn != null
       ? n.e_day_kwh * feedIn
-      : payload.estimatedIncomeEur;
+      : (payload.estimatedIncomeCzk ?? payload.estimatedIncomeEur);
 
   $("kpiProd").textContent = formatKwh(n.e_day_kwh);
   $("kpiCons").textContent = formatKwh(n.e_load_day_kwh);
-  $("kpiIncome").textContent = formatEur(income);
+  $("kpiIncome").textContent = formatCzk(income);
 
   if (ok && payload.model_name) {
     $("modelLine").textContent = `${payload.model_name}${
@@ -232,8 +232,8 @@ async function loadStats() {
     const j = await r.json();
     if (j.productionKwh != null) $("kpiProd").textContent = formatKwh(j.productionKwh);
     if (j.consumptionKwh != null) $("kpiCons").textContent = formatKwh(j.consumptionKwh);
-    if (j.estimatedIncomeEur != null)
-      $("kpiIncome").textContent = formatEur(j.estimatedIncomeEur);
+    if ((j.estimatedIncomeCzk ?? j.estimatedIncomeEur) != null)
+      $("kpiIncome").textContent = formatCzk(j.estimatedIncomeCzk ?? j.estimatedIncomeEur);
     const exportBtn = $("exportXlsBtn");
     if (exportBtn) exportBtn.href = `/api/export/xls?range=${encodeURIComponent(currentRange)}`;
   } catch {

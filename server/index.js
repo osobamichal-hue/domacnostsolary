@@ -29,13 +29,13 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const db = openDb(DATA_DIR);
+const dbPromise = openDb(DATA_DIR);
 
 const publicDir = path.join(__dirname, "..", "public");
 app.use(express.static(publicDir));
 
 function getFeedIn() {
-  return config.get().feedInEurPerKwh;
+  return config.get().feedInCzkPerKwh;
 }
 
 function getRangeBounds(preset, nowTs = Date.now()) {
@@ -88,35 +88,47 @@ app.get("/api/health", (_req, res) => {
   });
 });
 
-app.get("/api/live", (_req, res) => {
-  const row = latestReading(db);
-  if (!row) {
-    return res.json({ ok: false, message: "Zatím žádná data" });
-  }
-  const fi = getFeedIn();
-  const income =
-    row.payload?.normalized?.e_day_kwh != null
-      ? row.payload.normalized.e_day_kwh * fi
-      : null;
-  res.json({
-    ok: row.ok,
-    ts: row.ts,
-    feedInEurPerKwh: fi,
-    estimatedIncomeEur: income,
-    ...row.payload,
-  });
-});
-
-app.get("/api/series", (req, res) => {
-  const limit = Math.min(2000, Math.max(10, Number(req.query.limit) || 360));
-  res.json({ series: recentSeries(db, limit) });
-});
-
-app.get("/api/series-range", (req, res) => {
+app.get("/api/live", async (_req, res) => {
   try {
+    const db = await dbPromise;
+    const row = await latestReading(db);
+    if (!row) {
+      return res.json({ ok: false, message: "Zatím žádná data" });
+    }
+    const fi = getFeedIn();
+    const income =
+      row.payload?.normalized?.e_day_kwh != null
+        ? row.payload.normalized.e_day_kwh * fi
+        : null;
+    res.json({
+      ok: row.ok,
+      ts: row.ts,
+      feedInCzkPerKwh: fi,
+      estimatedIncomeCzk: income,
+      ...row.payload,
+    });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e.message || e) });
+  }
+});
+
+app.get("/api/series", async (req, res) => {
+  try {
+    const db = await dbPromise;
+    const limit = Math.min(2000, Math.max(10, Number(req.query.limit) || 360));
+    const series = await recentSeries(db, limit);
+    res.json({ series });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e.message || e) });
+  }
+});
+
+app.get("/api/series-range", async (req, res) => {
+  try {
+    const db = await dbPromise;
     const range = String(req.query.range || "day").toLowerCase();
     const { fromTs, toTs } = getRangeBounds(range, Date.now());
-    const raw = rowsForRange(db, fromTs, toTs, 250000).filter((r) => r.ok);
+    const raw = (await rowsForRange(db, fromTs, toTs, 250000)).filter((r) => r.ok);
 
     let bucketMs = 15 * 60 * 1000;
     if (range === "day") bucketMs = 5 * 60 * 1000;
@@ -166,27 +178,29 @@ app.get("/api/series-range", (req, res) => {
   }
 });
 
-app.get("/api/stats", (req, res) => {
+app.get("/api/stats", async (req, res) => {
   try {
+    const db = await dbPromise;
     const range = String(req.query.range || "day").toLowerCase();
-    const s = statsByPreset(db, range, Date.now());
+    const s = await statsByPreset(db, range, Date.now());
     const fi = getFeedIn();
     const income =
       s.productionKwh != null ? Number(s.productionKwh) * fi : null;
     res.json({
       ...s,
-      estimatedIncomeEur: income,
+      estimatedIncomeCzk: income,
     });
   } catch (e) {
     res.status(400).json({ ok: false, error: String(e.message || e) });
   }
 });
 
-app.get("/api/export/xls", (req, res) => {
+app.get("/api/export/xls", async (req, res) => {
   try {
+    const db = await dbPromise;
     const range = String(req.query.range || "day").toLowerCase();
     const { fromTs, toTs } = getRangeBounds(range, Date.now());
-    const rows = rowsForRange(db, fromTs, toTs, 200000).map((r) => ({
+    const rows = (await rowsForRange(db, fromTs, toTs, 200000)).map((r) => ({
       timestamp_iso: new Date(r.ts).toISOString(),
       ok: r.ok,
       model_name: r.model_name,
@@ -198,8 +212,12 @@ app.get("/api/export/xls", (req, res) => {
       battery_soc_pct: r.battery_soc_pct,
       e_day_kwh: r.e_day_kwh,
       e_load_day_kwh: r.e_load_day_kwh,
+      e_day_export_kwh: r.e_day_export_kwh,
+      e_day_import_kwh: r.e_day_import_kwh,
       e_total_kwh: r.e_total_kwh,
       e_load_total_kwh: r.e_load_total_kwh,
+      e_total_export_kwh: r.e_total_export_kwh,
+      e_total_import_kwh: r.e_total_import_kwh,
       payload_json: r.payload_json,
     }));
 
@@ -243,14 +261,15 @@ async function pollOnce() {
     return;
   }
   try {
+    const db = await dbPromise;
     const payload = await fetchFromInverter(c.pythonExe, c.goodweHost);
     const ok = Boolean(payload.ok);
-    insertReading(db, ok, payload);
+    await insertReading(db, ok, payload);
     broadcast({
       type: "reading",
       ok,
       ts: Date.now(),
-      feedInEurPerKwh: c.feedInEurPerKwh,
+      feedInCzkPerKwh: c.feedInCzkPerKwh,
       payload,
     });
   } catch (e) {
@@ -259,12 +278,13 @@ async function pollOnce() {
       error: String(e.message || e),
       ts: new Date().toISOString(),
     };
-    insertReading(db, false, fail);
+    const db = await dbPromise;
+    await insertReading(db, false, fail);
     broadcast({
       type: "reading",
       ok: false,
       ts: Date.now(),
-      feedInEurPerKwh: c.feedInEurPerKwh,
+      feedInCzkPerKwh: c.feedInCzkPerKwh,
       payload: fail,
     });
   }
@@ -277,24 +297,33 @@ function restartPolling() {
   pollTimer = setInterval(pollOnce, ms);
 }
 
-wss.on("connection", (ws) => {
+wss.on("connection", async (ws) => {
+  const db = await dbPromise;
   const c = config.get();
   ws.send(JSON.stringify({ type: "config", ...c }));
-  const row = latestReading(db);
+  const row = await latestReading(db);
   if (row) {
     ws.send(
       JSON.stringify({
         type: "reading",
         ok: row.ok,
         ts: row.ts,
-        feedInEurPerKwh: c.feedInEurPerKwh,
+        feedInCzkPerKwh: c.feedInCzkPerKwh,
         payload: row.payload,
       })
     );
   }
 });
 
-server.listen(PORT, () => {
-  console.log(`HomeAPP GoodWe dashboard: http://localhost:${PORT}`);
-  restartPolling();
-});
+(async () => {
+  try {
+    await dbPromise;
+    server.listen(PORT, () => {
+      console.log(`HomeAPP GoodWe dashboard: http://localhost:${PORT}`);
+      restartPolling();
+    });
+  } catch (e) {
+    console.error("Database init failed:", e);
+    process.exit(1);
+  }
+})();

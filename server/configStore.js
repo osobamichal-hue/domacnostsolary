@@ -12,7 +12,9 @@ function defaultsFromEnv() {
       5000,
       Number(process.env.POLL_INTERVAL_MS || 10000)
     ),
-    feedInEurPerKwh: Number(process.env.FEED_IN_EUR_PER_KWH || 0.22),
+    feedInCzkPerKwh: Number(
+      process.env.FEED_IN_CZK_PER_KWH || process.env.FEED_IN_EUR_PER_KWH || 5.5
+    ),
     pythonExe: String(process.env.PYTHON_EXE || "python").trim(),
   };
 }
@@ -32,8 +34,11 @@ function merge(base, file) {
   if (file.pollIntervalMs !== undefined) {
     out.pollIntervalMs = Math.max(5000, Number(file.pollIntervalMs));
   }
-  if (file.feedInEurPerKwh !== undefined) {
-    out.feedInEurPerKwh = Number(file.feedInEurPerKwh);
+  if (file.feedInCzkPerKwh !== undefined) {
+    out.feedInCzkPerKwh = Number(file.feedInCzkPerKwh);
+  } else if (file.feedInEurPerKwh !== undefined) {
+    // Backward compatibility se starším klíčem
+    out.feedInCzkPerKwh = Number(file.feedInEurPerKwh);
   }
   if (file.pythonExe !== undefined) {
     out.pythonExe = String(file.pythonExe).trim();
@@ -59,8 +64,12 @@ function validatePatch(patch) {
       err.push("Interval dotazování musí být 5 s až 24 h.");
     }
   }
-  if (patch.feedInEurPerKwh !== undefined) {
-    const f = Number(patch.feedInEurPerKwh);
+  if (patch.feedInCzkPerKwh !== undefined || patch.feedInEurPerKwh !== undefined) {
+    const f = Number(
+      patch.feedInCzkPerKwh !== undefined
+        ? patch.feedInCzkPerKwh
+        : patch.feedInEurPerKwh
+    );
     if (Number.isNaN(f) || f < 0 || f > 999) {
       err.push("Cena za kWh musí být 0–999.");
     }
@@ -88,7 +97,7 @@ function createConfigStore(dataDir) {
         {
           goodweHost: data.goodweHost,
           pollIntervalMs: data.pollIntervalMs,
-          feedInEurPerKwh: data.feedInEurPerKwh,
+          feedInCzkPerKwh: data.feedInCzkPerKwh,
           pythonExe: data.pythonExe,
         },
         null,
@@ -102,7 +111,7 @@ function createConfigStore(dataDir) {
     return {
       goodweHost: data.goodweHost,
       pollIntervalMs: data.pollIntervalMs,
-      feedInEurPerKwh: data.feedInEurPerKwh,
+      feedInCzkPerKwh: data.feedInCzkPerKwh,
       pythonExe: data.pythonExe,
     };
   }
@@ -119,8 +128,10 @@ function createConfigStore(dataDir) {
     if (patch.pollIntervalMs !== undefined) {
       next.pollIntervalMs = clampPoll(patch.pollIntervalMs);
     }
-    if (patch.feedInEurPerKwh !== undefined) {
-      next.feedInEurPerKwh = Number(patch.feedInEurPerKwh);
+    if (patch.feedInCzkPerKwh !== undefined) {
+      next.feedInCzkPerKwh = Number(patch.feedInCzkPerKwh);
+    } else if (patch.feedInEurPerKwh !== undefined) {
+      next.feedInCzkPerKwh = Number(patch.feedInEurPerKwh);
     }
     if (patch.pythonExe !== undefined) {
       next.pythonExe = String(patch.pythonExe).trim();

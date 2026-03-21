@@ -45,7 +45,7 @@ async function loadConfig() {
   if (!j.ok) throw new Error(j.error || "Nelze načíst konfiguraci");
   $("goodweHost").value = j.goodweHost || "";
   $("pollIntervalSec").value = String(Math.round((j.pollIntervalMs || 10000) / 1000));
-  $("feedInEurPerKwh").value = String(j.feedInEurPerKwh ?? 0.22);
+  $("feedInCzkPerKwh").value = String(j.feedInCzkPerKwh ?? j.feedInEurPerKwh ?? 5.5);
   $("pythonExe").value = j.pythonExe || "python";
 }
 
@@ -60,7 +60,7 @@ $("cfgForm").addEventListener("submit", async (e) => {
   const body = {
     goodweHost: $("goodweHost").value.trim(),
     pollIntervalMs: Math.round(pollSec * 1000),
-    feedInEurPerKwh: Number($("feedInEurPerKwh").value),
+    feedInCzkPerKwh: Number($("feedInCzkPerKwh").value),
     pythonExe: $("pythonExe").value.trim(),
   };
 

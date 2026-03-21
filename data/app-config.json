@@ -1,6 +1,6 @@
 {
   "goodweHost": "192.168.5.67",
   "pollIntervalMs": 15000,
-  "feedInEurPerKwh": 0.22,
+  "feedInCzkPerKwh": 5.5,
   "pythonExe": "py"
 }
