@@ -24,6 +24,7 @@
         </div>
         <div class="top-actions">
           <button type="button" class="theme-toggle" id="themeToggle" aria-label="Přepnout režim">🌙</button>
+          <button type="button" class="back-link logout-btn" id="logoutBtn">Odhlásit</button>
           <a href="/" class="back-link">← Přehled</a>
         </div>
       </header>
@@ -64,6 +65,41 @@
           <span class="form-status" id="formStatus" role="status" aria-live="polite"></span>
         </div>
       </form>
+
+      <section class="summary-card">
+        <h2 class="section-title">Správa uživatelů</h2>
+        <form id="userForm" class="settings-form" novalidate>
+          <div class="field">
+            <label for="newUsername">Nové uživatelské jméno</label>
+            <input
+              type="text"
+              id="newUsername"
+              name="newUsername"
+              autocomplete="off"
+              placeholder="např. servis"
+              required
+            />
+          </div>
+
+          <div class="field">
+            <label for="newPassword">Nové heslo</label>
+            <input
+              type="password"
+              id="newPassword"
+              name="newPassword"
+              autocomplete="new-password"
+              placeholder="alespoň 8 znaků"
+              required
+            />
+            <span class="hint">Povolené jméno: písmena, čísla, tečka, podtržítko, pomlčka.</span>
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary" id="btnCreateUser">Vytvořit uživatele</button>
+            <span class="form-status" id="userStatus" role="status" aria-live="polite"></span>
+          </div>
+        </form>
+      </section>
     </div>
 
     <script src="settings.js"></script>

@@ -80,6 +80,31 @@ async function openDb(dataDir) {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   `);
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      username VARCHAR(120) NOT NULL UNIQUE,
+      password_hash VARCHAR(255) NOT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS user_sessions (
+      id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      user_id BIGINT NOT NULL,
+      token_hash CHAR(64) NOT NULL UNIQUE,
+      expires_at BIGINT NOT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_user_sessions_token (token_hash),
+      INDEX idx_user_sessions_user (user_id),
+      INDEX idx_user_sessions_expires (expires_at),
+      CONSTRAINT fk_user_sessions_user
+        FOREIGN KEY (user_id) REFERENCES users(id)
+        ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  `);
+
   const sqlitePath = path.join(dataDir, "goodwe.sqlite");
   await migrateSqliteIfNeeded(pool, sqlitePath);
   return pool;
@@ -326,6 +351,66 @@ async function rowsForRange(db, fromTs, toTs, limit = 100000) {
   });
 }
 
+async function createUser(db, username, passwordHash) {
+  const [res] = await db.query(
+    "INSERT INTO users (username, password_hash) VALUES (?, ?)",
+    [username, passwordHash]
+  );
+  return Number(res.insertId);
+}
+
+async function getUserByUsername(db, username) {
+  const [rows] = await db.query(
+    "SELECT id, username, password_hash FROM users WHERE username = ? LIMIT 1",
+    [username]
+  );
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    id: Number(row.id),
+    username: String(row.username),
+    passwordHash: String(row.password_hash),
+  };
+}
+
+async function createSession(db, userId, tokenHash, expiresAtMs) {
+  await db.query(
+    "INSERT INTO user_sessions (user_id, token_hash, expires_at) VALUES (?, ?, ?)",
+    [userId, tokenHash, expiresAtMs]
+  );
+}
+
+async function getSessionWithUserByTokenHash(db, tokenHash) {
+  const now = Date.now();
+  const [rows] = await db.query(
+    `SELECT s.user_id, s.expires_at, u.username
+     FROM user_sessions s
+     JOIN users u ON u.id = s.user_id
+     WHERE s.token_hash = ? LIMIT 1`,
+    [tokenHash]
+  );
+  const row = rows[0];
+  if (!row) return null;
+  const expiresAt = Number(row.expires_at);
+  if (!Number.isFinite(expiresAt) || expiresAt < now) {
+    await db.query("DELETE FROM user_sessions WHERE token_hash = ?", [tokenHash]);
+    return null;
+  }
+  return {
+    userId: Number(row.user_id),
+    username: String(row.username),
+    expiresAt,
+  };
+}
+
+async function deleteSessionByTokenHash(db, tokenHash) {
+  await db.query("DELETE FROM user_sessions WHERE token_hash = ?", [tokenHash]);
+}
+
+async function pruneExpiredSessions(db) {
+  await db.query("DELETE FROM user_sessions WHERE expires_at < ?", [Date.now()]);
+}
+
 module.exports = {
   openDb,
   insertReading,
@@ -334,4 +419,10 @@ module.exports = {
   statsForRange,
   statsByPreset,
   rowsForRange,
+  createUser,
+  getUserByUsername,
+  createSession,
+  getSessionWithUserByTokenHash,
+  deleteSessionByTokenHash,
+  pruneExpiredSessions,
 };

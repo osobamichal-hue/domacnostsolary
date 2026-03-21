@@ -19,6 +19,17 @@ function initTheme() {
   });
 }
 
+function initLogout() {
+  $("logoutBtn")?.addEventListener("click", async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch {
+      /* ignore */
+    }
+    window.location.href = "/login.html";
+  });
+}
+
 async function parseApiResponse(res) {
   const text = await res.text();
   try {
@@ -83,8 +94,40 @@ $("cfgForm").addEventListener("submit", async (e) => {
   }
 });
 
+$("userForm")?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const status = $("userStatus");
+  const btn = $("btnCreateUser");
+  showStatus(status, "Vytvářím uživatele…", undefined);
+  btn.disabled = true;
+
+  const username = String($("newUsername").value || "").trim();
+  const password = String($("newPassword").value || "");
+
+  try {
+    const r = await fetch("/api/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    });
+    const j = await parseApiResponse(r);
+    if (!r.ok || !j.ok) {
+      showStatus(status, j.error || "Vytvoření uživatele se nezdařilo.", false);
+      return;
+    }
+    $("newUsername").value = "";
+    $("newPassword").value = "";
+    showStatus(status, `Uživatel ${j.user?.username || username} byl vytvořen.`, true);
+  } catch (err) {
+    showStatus(status, String(err.message || err), false);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
 loadConfig().catch((err) => {
   showStatus($("formStatus"), String(err.message || err), false);
 });
 
 initTheme();
+initLogout();

@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="cs">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Přihlášení - HomeAPP</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700;1,9..40,500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="login-page">
+    <div class="app settings-page">
+      <header class="top-bar">
+        <div class="top-bar-left">
+          <a href="/" class="brand">HomeAPP</a>
+        </div>
+      </header>
+
+      <section class="summary-card">
+        <h1 class="page-title">Přihlášení</h1>
+        <p class="page-lead">
+          Přihlaste se do aplikace. Vytvoření nového uživatele je dostupné v Nastavení.
+        </p>
+
+        <form class="settings-form" id="authForm">
+          <div class="field">
+            <label for="username">Uživatelské jméno</label>
+            <input id="username" name="username" type="text" autocomplete="username" required />
+          </div>
+          <div class="field">
+            <label for="password">Heslo</label>
+            <input
+              id="password"
+              name="password"
+              type="password"
+              autocomplete="current-password"
+              required
+            />
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary" id="submitBtn">Přihlásit</button>
+            <span id="formStatus" class="form-status"></span>
+          </div>
+        </form>
+      </section>
+    </div>
+
+    <script src="login.js"></script>
+  </body>
+</html>

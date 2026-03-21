@@ -39,6 +39,23 @@ body {
   color: var(--text);
 }
 
+body.login-page {
+  background-image: linear-gradient(rgba(4, 8, 16, 0.58), rgba(4, 8, 16, 0.72)),
+    url("/pict/DumTmava.png");
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+}
+
+.login-page .summary-card {
+  background: rgba(8, 12, 18, 0.78);
+  backdrop-filter: blur(10px);
+}
+
+[data-theme="light"] .login-page .summary-card {
+  background: rgba(255, 255, 255, 0.84);
+}
+
 .app {
   max-width: 520px;
   margin: 0 auto;
@@ -113,6 +130,14 @@ body {
 
 .back-link:hover {
   color: var(--text);
+}
+
+.logout-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
 }
 
 .connection {

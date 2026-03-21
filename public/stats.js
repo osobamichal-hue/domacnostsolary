@@ -26,6 +26,17 @@ function initTheme() {
   });
 }
 
+function initLogout() {
+  $("logoutBtn")?.addEventListener("click", async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch {
+      /* ignore */
+    }
+    window.location.href = "/login.html";
+  });
+}
+
 function formatKwh(v) {
   if (v == null || Number.isNaN(v)) return "—";
   return `${Number(v).toFixed(2)} kWh`;
@@ -249,6 +260,7 @@ function bindTabs() {
 
 (async function init() {
   initTheme();
+  initLogout();
   bindTabs();
   $("statsExportXls").href = `/api/export/xls?range=${encodeURIComponent(currentRange)}`;
   await Promise.all([loadStats(), loadSeries()]);

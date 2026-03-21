@@ -118,6 +118,17 @@ function initTheme() {
   });
 }
 
+function initLogout() {
+  $("logoutBtn")?.addEventListener("click", async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch {
+      /* ignore */
+    }
+    window.location.href = "/login.html";
+  });
+}
+
 function formatPowerW(w) {
   if (w == null || Number.isNaN(w)) return "—";
   const n = Number(w);
@@ -381,6 +392,7 @@ function connectWs() {
 // Mock počasí (volitelně lze napojit na API)
 $("weatherTemp").textContent = "8 °C";
 initTheme();
+initLogout();
 initRangeTabs();
 initDraggableLiveBlocks();
 

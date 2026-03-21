@@ -3,6 +3,7 @@
 require("dotenv").config();
 const http = require("http");
 const path = require("path");
+const crypto = require("crypto");
 const XLSX = require("xlsx");
 
 const express = require("express");
@@ -16,6 +17,12 @@ const {
   recentSeries,
   statsByPreset,
   rowsForRange,
+  createUser,
+  getUserByUsername,
+  createSession,
+  getSessionWithUserByTokenHash,
+  deleteSessionByTokenHash,
+  pruneExpiredSessions,
 } = require("./db");
 const { fetchFromInverter } = require("./poller");
 const { createConfigStore } = require("./configStore");
@@ -32,7 +39,160 @@ app.use(express.json());
 const dbPromise = openDb(DATA_DIR);
 
 const publicDir = path.join(__dirname, "..", "public");
+const SESSION_COOKIE = "homeapp_session";
+const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 14;
+
+function parseCookies(req) {
+  const raw = String(req.headers.cookie || "");
+  const out = {};
+  for (const part of raw.split(";")) {
+    const idx = part.indexOf("=");
+    if (idx < 0) continue;
+    const k = part.slice(0, idx).trim();
+    const v = part.slice(idx + 1).trim();
+    if (k) out[k] = decodeURIComponent(v);
+  }
+  return out;
+}
+
+function hashToken(token) {
+  return crypto.createHash("sha256").update(token).digest("hex");
+}
+
+function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString("hex");
+  const derived = crypto.scryptSync(password, salt, 64).toString("hex");
+  return `scrypt:${salt}:${derived}`;
+}
+
+function verifyPassword(password, encoded) {
+  const parts = String(encoded || "").split(":");
+  if (parts.length !== 3 || parts[0] !== "scrypt") return false;
+  const salt = parts[1];
+  const expected = Buffer.from(parts[2], "hex");
+  const actual = crypto.scryptSync(password, salt, 64);
+  if (expected.length !== actual.length) return false;
+  return crypto.timingSafeEqual(expected, actual);
+}
+
+function setSessionCookie(res, token) {
+  const maxAgeSec = Math.floor(SESSION_TTL_MS / 1000);
+  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
+  res.setHeader(
+    "Set-Cookie",
+    `${SESSION_COOKIE}=${encodeURIComponent(
+      token
+    )}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAgeSec}${secure}`
+  );
+}
+
+function clearSessionCookie(res) {
+  res.setHeader(
+    "Set-Cookie",
+    `${SESSION_COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`
+  );
+}
+
+async function authenticateRequest(req, res, next) {
+  try {
+    const url = String(req.path || req.url || "");
+    const isAuthMe = url === "/api/auth/me";
+    const publicPath =
+      url === "/login" ||
+      url === "/login.html" ||
+      url === "/login.js" ||
+      url === "/styles.css" ||
+      url.startsWith("/pict/") ||
+      (url.startsWith("/api/auth/") && !isAuthMe) ||
+      url === "/api/health";
+    if (publicPath) return next();
+
+    const token = parseCookies(req)[SESSION_COOKIE];
+    if (!token) return rejectAuth(req, res);
+    const db = await dbPromise;
+    const session = await getSessionWithUserByTokenHash(db, hashToken(token));
+    if (!session) return rejectAuth(req, res);
+    req.authUser = { id: session.userId, username: session.username };
+    return next();
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: String(e.message || e) });
+  }
+}
+
+function rejectAuth(req, res) {
+  if (String(req.path || "").startsWith("/api/")) {
+    return res.status(401).json({ ok: false, error: "Nejste přihlášen." });
+  }
+  return res.redirect("/login.html");
+}
+
+app.use(authenticateRequest);
 app.use(express.static(publicDir));
+app.get("/login", (_req, res) => res.sendFile(path.join(publicDir, "login.html")));
+
+app.get("/api/auth/me", async (req, res) => {
+  if (!req.authUser) return res.status(401).json({ ok: false, error: "Nejste přihlášen." });
+  res.json({ ok: true, user: { id: req.authUser.id, username: req.authUser.username } });
+});
+
+app.post("/api/auth/register", async (req, res) => {
+  try {
+    const username = String(req.body?.username || "").trim();
+    const password = String(req.body?.password || "");
+    if (!/^[a-zA-Z0-9_.-]{3,40}$/.test(username)) {
+      return res
+        .status(400)
+        .json({ ok: false, error: "Uživatel musí mít 3-40 znaků: písmena, čísla, ., _, -" });
+    }
+    if (password.length < 8) {
+      return res.status(400).json({ ok: false, error: "Heslo musí mít alespoň 8 znaků." });
+    }
+    const db = await dbPromise;
+    const exists = await getUserByUsername(db, username);
+    if (exists) {
+      return res.status(409).json({ ok: false, error: "Uživatel již existuje." });
+    }
+    const userId = await createUser(db, username, hashPassword(password));
+    const token = crypto.randomBytes(32).toString("hex");
+    await createSession(db, userId, hashToken(token), Date.now() + SESSION_TTL_MS);
+    setSessionCookie(res, token);
+    res.json({ ok: true, user: { id: userId, username } });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e.message || e) });
+  }
+});
+
+app.post("/api/auth/login", async (req, res) => {
+  try {
+    const username = String(req.body?.username || "").trim();
+    const password = String(req.body?.password || "");
+    const db = await dbPromise;
+    const user = await getUserByUsername(db, username);
+    if (!user || !verifyPassword(password, user.passwordHash)) {
+      return res.status(401).json({ ok: false, error: "Neplatné přihlašovací údaje." });
+    }
+    const token = crypto.randomBytes(32).toString("hex");
+    await createSession(db, user.id, hashToken(token), Date.now() + SESSION_TTL_MS);
+    setSessionCookie(res, token);
+    res.json({ ok: true, user: { id: user.id, username: user.username } });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e.message || e) });
+  }
+});
+
+app.post("/api/auth/logout", async (req, res) => {
+  try {
+    const token = parseCookies(req)[SESSION_COOKIE];
+    if (token) {
+      const db = await dbPromise;
+      await deleteSessionByTokenHash(db, hashToken(token));
+    }
+    clearSessionCookie(res);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e.message || e) });
+  }
+});
 
 function getFeedIn() {
   return config.get().feedInCzkPerKwh;
@@ -297,8 +457,18 @@ function restartPolling() {
   pollTimer = setInterval(pollOnce, ms);
 }
 
-wss.on("connection", async (ws) => {
+wss.on("connection", async (ws, req) => {
+  const token = parseCookies(req)[SESSION_COOKIE];
+  if (!token) {
+    ws.close();
+    return;
+  }
   const db = await dbPromise;
+  const session = await getSessionWithUserByTokenHash(db, hashToken(token));
+  if (!session) {
+    ws.close();
+    return;
+  }
   const c = config.get();
   ws.send(JSON.stringify({ type: "config", ...c }));
   const row = await latestReading(db);
@@ -317,7 +487,9 @@ wss.on("connection", async (ws) => {
 
 (async () => {
   try {
-    await dbPromise;
+    const db = await dbPromise;
+    await pruneExpiredSessions(db);
+    setInterval(() => pruneExpiredSessions(db).catch(() => {}), 60 * 60 * 1000);
     server.listen(PORT, () => {
       console.log(`HomeAPP GoodWe dashboard: http://localhost:${PORT}`);
       restartPolling();
