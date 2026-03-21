@@ -18,7 +18,22 @@ function writeLayout(next) {
   localStorage.setItem(LAYOUT_KEY, JSON.stringify(next));
 }
 
+function isMobileVizLayout() {
+  return window.matchMedia("(max-width: 768px)").matches;
+}
+
+function clearInlinePosition(el) {
+  el.style.left = "";
+  el.style.top = "";
+  el.style.right = "";
+  el.style.bottom = "";
+}
+
 function applySavedPosition(el, key) {
+  if (isMobileVizLayout()) {
+    clearInlinePosition(el);
+    return;
+  }
   const map = readLayout();
   const p = map[key];
   if (!p) return;
@@ -28,8 +43,24 @@ function applySavedPosition(el, key) {
   el.style.bottom = "auto";
 }
 
+function syncVizLayoutForViewport() {
+  const wrap = document.querySelector(".viz-wrap");
+  if (!wrap) return;
+  const targets = [
+    ["labelGrid", $("labelGrid")],
+    ["labelSolar", $("labelSolar")],
+    ["labelLoad", $("labelLoad")],
+    ["labelBat", $("labelBat")],
+    ["metricPhase", document.querySelector(".metric-card-phase")],
+    ["metricTemp", document.querySelector(".metric-card-temp")],
+    ["metricModes", document.querySelector(".metric-card-modes")],
+  ].filter(([, el]) => !!el);
+  for (const [key, el] of targets) applySavedPosition(el, key);
+}
+
 function initDraggableLiveBlocks() {
   const wrap = document.querySelector(".viz-wrap");
+  const stage = document.querySelector(".viz-stage");
   if (!wrap) return;
 
   const targets = [
@@ -46,10 +77,11 @@ function initDraggableLiveBlocks() {
     applySavedPosition(el, key);
     el.addEventListener("pointerdown", (ev) => {
       if (ev.button !== 0) return;
-      if (window.matchMedia("(max-width: 1024px)").matches) return;
+      if (isMobileVizLayout()) return;
       if (getComputedStyle(el).position !== "absolute") return;
 
-      const wrapRect = wrap.getBoundingClientRect();
+      const boundsEl = key.startsWith("label") && stage ? stage : wrap;
+      const wrapRect = boundsEl.getBoundingClientRect();
       const rect = el.getBoundingClientRect();
       const shiftX = ev.clientX - rect.left;
       const shiftY = ev.clientY - rect.top;
@@ -81,6 +113,15 @@ function initDraggableLiveBlocks() {
       ev.preventDefault();
     });
   }
+
+  let lastMobile = isMobileVizLayout();
+  window.addEventListener("resize", () => {
+    const now = isMobileVizLayout();
+    if (now !== lastMobile) {
+      lastMobile = now;
+      syncVizLayoutForViewport();
+    }
+  });
 }
 
 function updateHouseImages(soc) {

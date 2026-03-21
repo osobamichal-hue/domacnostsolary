@@ -271,7 +271,13 @@ body.login-page {
   min-height: 460px;
 }
 
-.viz-wrap::before {
+.viz-stage {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+}
+
+.viz-stage::before {
   content: "";
   position: absolute;
   inset: 0;
@@ -281,7 +287,7 @@ body.login-page {
   background: rgba(4, 10, 22, 0.12);
 }
 
-[data-theme="light"] .viz-wrap::before {
+[data-theme="light"] .viz-stage::before {
   background: transparent;
 }
 
@@ -878,13 +884,31 @@ body.login-page {
     grid-template-columns: 1fr;
   }
 
+  /* Tři hlavní metrické karty pod obrázkem domu; štítky zůstávají v overlay. */
+  .viz-wrap {
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .viz-stage {
+    aspect-ratio: 1 / 1;
+    width: 100%;
+    flex-shrink: 0;
+  }
+
   .live-metrics-grid {
     position: static;
-    display: grid;
-    grid-template-columns: 1fr;
+    display: flex;
+    flex-direction: column;
     gap: 10px;
-    margin: 10px 0 4px;
+    inset: auto;
+    z-index: 4;
     pointer-events: auto;
+    width: 100%;
+    padding: 0 6px 10px;
+    box-sizing: border-box;
   }
 
   .viz-wrap .label,
@@ -893,10 +917,33 @@ body.login-page {
   }
 
   .live-metrics-grid .metric-card {
-    position: static;
-    width: auto;
-    background: var(--surface);
+    position: static !important;
+    width: 100% !important;
+    max-width: none !important;
+    left: auto !important;
+    top: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    padding: 10px 12px;
+    background: var(--surface2);
     backdrop-filter: none;
+  }
+
+  .live-metrics-grid .metric-card h3 {
+    font-size: 0.74rem;
+    margin-bottom: 6px;
+  }
+
+  .live-metrics-grid .metric-key {
+    font-size: 0.72rem;
+  }
+
+  .live-metrics-grid .metric-val {
+    font-size: 0.74rem;
+  }
+
+  [data-theme="light"] .live-metrics-grid .metric-card {
+    background: rgba(255, 255, 255, 0.92);
   }
 
   .kpi-value {
@@ -909,45 +956,46 @@ body.login-page {
     flex-wrap: wrap;
   }
 
-  .viz-wrap {
-    min-height: 350px;
-  }
-
   .label {
-    min-width: 92px;
-    padding: 7px 8px;
+    min-width: 0;
+    max-width: 46%;
+    padding: 5px 7px;
   }
 
   .label-title {
-    font-size: 0.6rem;
+    font-size: 0.58rem;
   }
 
   .label-val {
-    font-size: 0.88rem;
+    font-size: 0.8rem;
   }
 
   .label-sub {
-    font-size: 0.72rem;
+    font-size: 0.68rem;
   }
 
   .label-grid {
-    right: 6px;
-    top: 8px;
+    left: 7% !important;
+    top: 15% !important;
+    right: auto !important;
   }
 
   .label-solar {
-    right: 8px;
-    top: 92px;
+    right: 2% !important;
+    top: 9% !important;
+    left: auto !important;
   }
 
   .label-load {
-    left: 8px;
-    bottom: 58px;
+    left: 2% !important;
+    bottom: 16% !important;
+    right: auto !important;
   }
 
   .label-bat {
-    right: 8px;
-    bottom: 18px;
+    right: 2% !important;
+    bottom: 4% !important;
+    left: auto !important;
   }
 
   .section-row {
@@ -971,6 +1019,6 @@ body.login-page {
   }
 
   .viz-wrap {
-    min-height: 320px;
+    min-height: 0;
   }
 }
