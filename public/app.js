@@ -1,5 +1,11 @@
 /* global WebSocket */
 
+/**
+ * Živé SVG overlay toky energie (animované čárkované čáry na domě).
+ * false = vypnuto (SVG hidden, data-energy-flow="off").
+ */
+const ENERGY_FLOW_OVERLAY_ENABLED = true;
+
 const $ = (id) => document.getElementById(id);
 const THEME_KEY = "homeapp_theme";
 const LAYOUT_KEY = "homeapp_live_layout_v1";
@@ -124,14 +130,24 @@ function initDraggableLiveBlocks() {
   });
 }
 
+function darkHouseSrcByBatterySocPct(socPct) {
+  const p = Number(socPct);
+  if (socPct == null || Number.isNaN(p)) return "/pict/DumTmava.png";
+  const clamped = Math.max(0, Math.min(100, p));
+  let idx = 1;
+  if (clamped >= 75) idx = 4;
+  else if (clamped >= 50) idx = 3;
+  else if (clamped >= 25) idx = 2;
+  const name = `Tmavý_${String(idx).padStart(2, "0")}.png`;
+  return encodeURI(`/pict/${name}`);
+}
+
 function updateHouseImages(soc) {
   const light = $("houseImgLight");
   const dark = $("houseImgDark");
   if (!light || !dark) return;
-  // Dočasně používáme jen full-size podklady.
-  // Varianty 220x122 jsou pro hlavní panel příliš malé a rozmazávají se.
   light.src = "/pict/DumSvetla.png";
-  dark.src = "/pict/DumTmava.png";
+  dark.src = darkHouseSrcByBatterySocPct(soc);
 }
 
 function cssVar(name, fallback) {
@@ -196,22 +212,12 @@ function formatCzk(v) {
   return `${Number(v).toFixed(2)} Kč`;
 }
 
-function setFlowIntensity(paths, solarW, loadW, batW, gridW) {
+function computeFlowBranches(solarW, loadW, batW, gridW) {
   const sw = Number(solarW || 0);
   const lw = Number(loadW || 0);
   const bw = Number(batW || 0);
   const gw = Number(gridW || 0);
 
-  const th = (w, floor = 0.42, scale = 5000) => {
-    const a = Math.min(1, Math.abs(Number(w) || 0) / scale);
-    return floor + a * (1 - floor);
-  };
-  const speed = (w) => {
-    const a = Math.min(1, Math.abs(Number(w) || 0) / 4500);
-    return `${1.15 - a * 0.65}s`;
-  };
-
-  // Přibližné rozdělení napájení zátěže podle okamžitých toků.
   const loadDemand = Math.max(0, lw);
   const gridImport = Math.max(0, -gw);
   const batDischarge = Math.max(0, bw);
@@ -228,31 +234,16 @@ function setFlowIntensity(paths, solarW, loadW, batW, gridW) {
   const batteryBranchFlow = Math.abs(bw);
   const pvBranchFlow = Math.abs(sw);
 
-  paths.pvInv.style.opacity = String(th(pvBranchFlow));
-  paths.invLoad.style.opacity = String(th(inverterToLoad, 0.38, 4500));
-  paths.invBat.style.opacity = String(th(batteryBranchFlow));
-  paths.invGrid.style.opacity = String(th(gridBranchFlow));
-  paths.pvInv.style.animationDuration = speed(pvBranchFlow);
-  paths.invLoad.style.animationDuration = speed(inverterToLoad);
-  paths.invBat.style.animationDuration = speed(batteryBranchFlow);
-  paths.invGrid.style.animationDuration = speed(gridBranchFlow);
-
-  const dim = (el, w) => {
-    el.classList.toggle("dim", !w || Math.abs(w) < 8);
+  return {
+    pvBranchFlow,
+    inverterToLoad,
+    batteryBranchFlow,
+    gridBranchFlow,
+    revPvInv: sw < 0,
+    revInvGrid: gw < 0,
+    revInvBat: bw > 0,
+    revInvLoad: lw < 0,
   };
-  dim(paths.pvInv, pvBranchFlow);
-  dim(paths.invLoad, inverterToLoad);
-  dim(paths.invBat, batteryBranchFlow);
-  dim(paths.invGrid, gridBranchFlow);
-
-  // Směr toku:
-  // - grid_w > 0: export do sítě (inverter -> sloup), < 0: import ze sítě (sloup -> inverter)
-  // - battery_w < 0: nabíjení baterie (inverter -> baterie), > 0: vybíjení (baterie -> inverter)
-  // - load_w > 0: dodávka do domácnosti (inverter -> dům), < 0: opačný tok (vzácné)
-  paths.pvInv.classList.toggle("reverse", sw < 0);
-  paths.invGrid.classList.toggle("reverse", gw < 0);
-  paths.invBat.classList.toggle("reverse", bw > 0);
-  paths.invLoad.classList.toggle("reverse", lw < 0);
 }
 
 const paths = {
@@ -261,6 +252,42 @@ const paths = {
   invBat: document.getElementById("pathInvBat"),
   invGrid: document.getElementById("pathInvGrid"),
 };
+
+function setFlowIntensity(paths, solarW, loadW, batW, gridW) {
+  if (!ENERGY_FLOW_OVERLAY_ENABLED) return;
+  const c = computeFlowBranches(solarW, loadW, batW, gridW);
+
+  const th = (w, floor = 0.42, scale = 5000) => {
+    const a = Math.min(1, Math.abs(Number(w) || 0) / scale);
+    return floor + a * (1 - floor);
+  };
+  const speed = (w) => {
+    const a = Math.min(1, Math.abs(Number(w) || 0) / 4500);
+    return `${1.15 - a * 0.65}s`;
+  };
+
+  paths.pvInv.style.opacity = String(th(c.pvBranchFlow));
+  paths.invLoad.style.opacity = String(th(c.inverterToLoad, 0.38, 4500));
+  paths.invBat.style.opacity = String(th(c.batteryBranchFlow));
+  paths.invGrid.style.opacity = String(th(c.gridBranchFlow));
+  paths.pvInv.style.animationDuration = speed(c.pvBranchFlow);
+  paths.invLoad.style.animationDuration = speed(c.inverterToLoad);
+  paths.invBat.style.animationDuration = speed(c.batteryBranchFlow);
+  paths.invGrid.style.animationDuration = speed(c.gridBranchFlow);
+
+  const dim = (el, w) => {
+    el.classList.toggle("dim", !w || Math.abs(w) < 8);
+  };
+  dim(paths.pvInv, c.pvBranchFlow);
+  dim(paths.invLoad, c.inverterToLoad);
+  dim(paths.invBat, c.batteryBranchFlow);
+  dim(paths.invGrid, c.gridBranchFlow);
+
+  paths.pvInv.classList.toggle("reverse", c.revPvInv);
+  paths.invGrid.classList.toggle("reverse", c.revInvGrid);
+  paths.invBat.classList.toggle("reverse", c.revInvBat);
+  paths.invLoad.classList.toggle("reverse", c.revInvLoad);
+}
 
 const series = {
   t: [],
@@ -394,6 +421,16 @@ async function loadStats() {
   }
 }
 
+function initEnergyFlowOverlay() {
+  const svg = document.querySelector(".energy-viz");
+  document.documentElement.setAttribute(
+    "data-energy-flow",
+    ENERGY_FLOW_OVERLAY_ENABLED ? "on" : "off"
+  );
+  if (!svg) return;
+  svg.hidden = !ENERGY_FLOW_OVERLAY_ENABLED;
+}
+
 function initRangeTabs() {
   const tabs = Array.from(document.querySelectorAll(".tab[data-range]"));
   tabs.forEach((tab) => {
@@ -433,6 +470,7 @@ function connectWs() {
 // Mock počasí (volitelně lze napojit na API)
 $("weatherTemp").textContent = "8 °C";
 initTheme();
+initEnergyFlowOverlay();
 initLogout();
 initRangeTabs();
 initDraggableLiveBlocks();
