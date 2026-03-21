@@ -1,0 +1,66 @@
+﻿<!DOCTYPE html>
+<html lang="cs">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Statistiky · GoodWe HomeAPP</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700;1,9..40,500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app stats-page">
+      <header class="top-bar">
+        <div class="top-bar-left">
+          <a href="/" class="brand">HomeAPP</a>
+          <nav class="nav" aria-label="Hlavní menu">
+            <a href="stats.html" class="nav-link nav-link--active" aria-current="page">Statistiky</a>
+            <a href="settings.html" class="nav-link">Nastavení</a>
+          </nav>
+        </div>
+        <div class="top-actions">
+          <button type="button" class="theme-toggle" id="themeToggle" aria-label="Přepnout režim">🌙</button>
+          <a href="/" class="back-link">← Přehled</a>
+        </div>
+      </header>
+
+      <section class="summary-card" aria-label="Souhrn statistik">
+        <div class="summary-head">
+          <h1 class="section-title">Statistiky</h1>
+          <div class="range-tabs">
+            <button type="button" class="tab active" data-range="day">Den</button>
+            <button type="button" class="tab" data-range="month">Měsíc</button>
+            <button type="button" class="tab" data-range="year">Rok</button>
+          </div>
+        </div>
+        <div class="summary-kpis stats-kpis">
+          <div class="kpi"><span class="kpi-label">Výroba</span><span class="kpi-value" id="sProd">—</span></div>
+          <div class="kpi"><span class="kpi-label">Spotřeba</span><span class="kpi-value" id="sCons">—</span></div>
+          <div class="kpi"><span class="kpi-label">Příjem</span><span class="kpi-value" id="sIncome">—</span></div>
+          <div class="kpi"><span class="kpi-label">Vzorky</span><span class="kpi-value" id="sSamples">—</span></div>
+        </div>
+      </section>
+
+      <section class="chart-section">
+        <div class="section-row">
+          <h2 class="section-title">Průměrný výkon v čase</h2>
+          <a id="statsExportXls" class="export-link" href="/api/export/xls?range=day">Export XLS</a>
+        </div>
+        <canvas id="powerChart" width="900" height="260"></canvas>
+      </section>
+
+      <section class="chart-section">
+        <h2 class="section-title">Stav baterie (%)</h2>
+        <canvas id="socChart" width="900" height="180"></canvas>
+      </section>
+
+      <div class="model-line" id="statsInfo"></div>
+    </div>
+
+    <script src="stats.js"></script>
+  </body>
+</html>

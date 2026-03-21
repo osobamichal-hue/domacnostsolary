@@ -1,0 +1,71 @@
+﻿<!DOCTYPE html>
+<html lang="cs">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nastavení - GoodWe HomeAPP</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700;1,9..40,500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app settings-page">
+      <header class="top-bar">
+        <div class="top-bar-left">
+          <a href="/" class="brand">HomeAPP</a>
+          <nav class="nav" aria-label="Hlavní menu">
+            <a href="stats.html" class="nav-link">Statistiky</a>
+            <a href="settings.html" class="nav-link nav-link--active" aria-current="page">Nastavení</a>
+          </nav>
+        </div>
+        <div class="top-actions">
+          <button type="button" class="theme-toggle" id="themeToggle" aria-label="Přepnout režim">🌙</button>
+          <a href="/" class="back-link">← Přehled</a>
+        </div>
+      </header>
+
+      <h1 class="page-title">Konfigurace</h1>
+      <p class="page-lead">
+        Údaje se ukládají do souboru <code>data/app-config.json</code> a po uložení se okamžitě použijí (bez restartu
+        serveru). Port HTTP zůstává v <code>.env</code> (<code>PORT</code>).
+      </p>
+
+      <form id="cfgForm" class="settings-form" novalidate>
+        <div class="field">
+          <label for="goodweHost">IP adresa nebo hostname střídače</label>
+          <input type="text" id="goodweHost" name="goodweHost" autocomplete="off" placeholder="např. 192.168.1.14" required />
+          <span class="hint">Komunikace UDP na portu 8899 (viz dokumentace GoodWe).</span>
+        </div>
+
+        <div class="field">
+          <label for="pollIntervalSec">Interval dotazování (sekundy)</label>
+          <input type="number" id="pollIntervalSec" name="pollIntervalSec" min="5" max="86400" step="1" required />
+          <span class="hint">Minimum 5 s. Při výpadcích SEMS zkuste 30-60 s.</span>
+        </div>
+
+        <div class="field">
+          <label for="feedInEurPerKwh">Výkupní cena (EUR za kWh)</label>
+          <input type="number" id="feedInEurPerKwh" name="feedInEurPerKwh" min="0" max="999" step="0.01" required />
+          <span class="hint">Pro odhad řádku „Generační příjem“ na přehledu.</span>
+        </div>
+
+        <div class="field">
+          <label for="pythonExe">Příkaz pro spuštění Pythonu</label>
+          <input type="text" id="pythonExe" name="pythonExe" placeholder="python nebo py" required />
+          <span class="hint">Na Windows často <code>py</code>, jinde <code>python3</code>.</span>
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary" id="btnSave">Uložit</button>
+          <span class="form-status" id="formStatus" role="status" aria-live="polite"></span>
+        </div>
+      </form>
+    </div>
+
+    <script src="settings.js"></script>
+  </body>
+</html>

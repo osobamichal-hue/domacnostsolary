@@ -1,0 +1,21 @@
+{
+  "name": "homeapp",
+  "version": "0.0.0",
+  "private": true,
+  "engines": {
+    "node": ">=20.0.0 <21",
+    "npm": ">=10.0.0"
+  },
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node server/index.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.7.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "ws": "^8.18.0",
+    "xlsx": "^0.18.5"
+  }
+}

@@ -1,0 +1,125 @@
+﻿<!DOCTYPE html>
+<html lang="cs">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GoodWe - HomeAPP</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700;1,9..40,500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="top-bar">
+        <div class="top-bar-left">
+          <a href="/" class="brand">HomeAPP</a>
+          <nav class="nav" aria-label="Hlavní menu">
+            <a href="stats.html" class="nav-link">Statistiky</a>
+            <a href="settings.html" class="nav-link">Nastavení</a>
+          </nav>
+        </div>
+        <div class="top-actions">
+          <button type="button" class="theme-toggle" id="themeToggle" aria-label="Přepnout režim">🌙</button>
+          <div class="connection" id="connStatus">Spojení…</div>
+        </div>
+      </header>
+
+      <section class="summary-card" aria-label="Denní přehled">
+        <div class="summary-head">
+          <div class="weather">
+            <span class="weather-icon" aria-hidden="true">⛅</span>
+            <span id="weatherTemp">—</span>
+          </div>
+          <div class="range-tabs">
+            <button type="button" class="tab active" data-range="day">Den</button>
+            <button type="button" class="tab" data-range="month">Měsíc</button>
+            <button type="button" class="tab" data-range="year">Rok</button>
+          </div>
+        </div>
+        <div class="summary-kpis">
+          <div class="kpi">
+            <span class="kpi-label">Výroba energie</span>
+            <span class="kpi-value" id="kpiProd">—</span>
+          </div>
+          <div class="kpi">
+            <span class="kpi-label">Spotřeba energie</span>
+            <span class="kpi-value" id="kpiCons">—</span>
+          </div>
+          <div class="kpi">
+            <span class="kpi-label">Generační příjem</span>
+            <span class="kpi-value" id="kpiIncome">—</span>
+          </div>
+        </div>
+        <div class="dots" aria-hidden="true"><span></span><span></span><span></span></div>
+      </section>
+
+      <section class="live-panel" aria-label="Živá data">
+        <h2 class="section-title">Živá data</h2>
+        <div class="viz-wrap">
+          <img id="houseImgLight" class="house-img house-img-light" src="/pict/DumSvetla.png" alt="" aria-hidden="true" />
+          <img id="houseImgDark" class="house-img house-img-dark" src="/pict/DumTmava.png" alt="" aria-hidden="true" />
+
+          <svg class="energy-viz" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <defs>
+              <linearGradient id="flowGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stop-color="#137534" />
+                <stop offset="50%" stop-color="#49ff84" />
+                <stop offset="100%" stop-color="#137534" />
+              </linearGradient>
+              <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+                <feGaussianBlur stdDeviation="5.2" result="b" />
+                <feMerge>
+                  <feMergeNode in="b" />
+                  <feMergeNode in="SourceGraphic" />
+                </feMerge>
+              </filter>
+            </defs>
+
+            <path class="flow-under" d="M 556 585 L 304 585 L 304 435 C 304 412 289 398 258 386" fill="none" />
+            <path id="pathInvGrid" class="flow-path" d="M 556 585 L 304 585 L 304 435 C 304 412 289 398 258 386" fill="none" />
+            <path class="flow-under" d="M 613 436 C 596 470 572 520 560 586" fill="none" />
+            <path id="pathPvInv" class="flow-path" d="M 613 436 C 596 470 572 520 560 586" fill="none" />
+            <path class="flow-under" d="M 560 620 L 560 704" fill="none" />
+            <path id="pathInvBat" class="flow-path" d="M 560 620 L 560 704" fill="none" />
+            <path class="flow-under" d="M 554 585 L 474 585 L 474 772 L 302 772 L 302 620" fill="none" />
+            <path id="pathInvLoad" class="flow-path" d="M 554 585 L 474 585 L 474 772 L 302 772 L 302 620" fill="none" />
+          </svg>
+
+          <div class="label label-grid" id="labelGrid">
+            <span class="label-title">Síť</span>
+            <span class="label-val" id="valGrid">—</span>
+          </div>
+          <div class="label label-solar" id="labelSolar">
+            <span class="label-title">Sluneční</span>
+            <span class="label-val" id="valSolar">—</span>
+          </div>
+          <div class="label label-load" id="labelLoad">
+            <span class="label-title">Zátěž</span>
+            <span class="label-val" id="valLoad">—</span>
+          </div>
+          <div class="label label-bat" id="labelBat">
+            <span class="label-title">Baterie</span>
+            <span class="label-val" id="valBat">—</span>
+            <span class="label-sub" id="valBatSoc">—</span>
+          </div>
+        </div>
+
+        <div class="model-line" id="modelLine"></div>
+      </section>
+
+      <section class="chart-section" aria-label="Historie výkonu">
+        <div class="section-row">
+          <h2 class="section-title">Výkon (živé vzorky)</h2>
+          <a id="exportXlsBtn" class="export-link" href="/api/export/xls?range=day">Export XLS</a>
+        </div>
+        <canvas id="chart" width="800" height="200"></canvas>
+      </section>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
