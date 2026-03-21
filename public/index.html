@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="cs">
   <head>
     <meta charset="UTF-8" />
@@ -81,10 +81,10 @@
 
             <path class="flow-under" d="M 556 585 L 304 585 L 304 435 C 304 412 289 398 258 386" fill="none" />
             <path id="pathInvGrid" class="flow-path" d="M 556 585 L 304 585 L 304 435 C 304 412 289 398 258 386" fill="none" />
-            <path class="flow-under" d="M 613 436 C 596 470 572 520 560 586" fill="none" />
-            <path id="pathPvInv" class="flow-path" d="M 613 436 C 596 470 572 520 560 586" fill="none" />
-            <path class="flow-under" d="M 560 620 L 560 704" fill="none" />
-            <path id="pathInvBat" class="flow-path" d="M 560 620 L 560 704" fill="none" />
+            <path class="flow-under" d="M 644 430 C 614 468 570 532 534 586" fill="none" />
+            <path id="pathPvInv" class="flow-path" d="M 644 430 C 614 468 570 532 534 586" fill="none" />
+            <path class="flow-under flow-under-bat" d="M 526 628 L 526 786" fill="none" />
+            <path id="pathInvBat" class="flow-path" d="M 526 628 L 526 786" fill="none" />
             <path class="flow-under" d="M 554 585 L 474 585 L 474 772 L 302 772 L 302 620" fill="none" />
             <path id="pathInvLoad" class="flow-path" d="M 554 585 L 474 585 L 474 772 L 302 772 L 302 620" fill="none" />
           </svg>
@@ -105,6 +105,32 @@
             <span class="label-title">Baterie</span>
             <span class="label-val" id="valBat">—</span>
             <span class="label-sub" id="valBatSoc">—</span>
+          </div>
+
+          <div class="live-metrics-grid" id="liveMetricsGrid">
+            <section class="metric-card metric-card-phase">
+              <h3>Výkon po fázích</h3>
+              <div class="metric-item"><span class="metric-key">Load L1</span><span class="metric-val" id="mLoadP1">—</span></div>
+              <div class="metric-item"><span class="metric-key">Load L2</span><span class="metric-val" id="mLoadP2">—</span></div>
+              <div class="metric-item"><span class="metric-key">Load L3</span><span class="metric-val" id="mLoadP3">—</span></div>
+              <div class="metric-item"><span class="metric-key">Grid P1</span><span class="metric-val" id="mGridP1">—</span></div>
+              <div class="metric-item"><span class="metric-key">Grid P2</span><span class="metric-val" id="mGridP2">—</span></div>
+              <div class="metric-item"><span class="metric-key">Grid P3</span><span class="metric-val" id="mGridP3">—</span></div>
+            </section>
+
+            <section class="metric-card metric-card-temp">
+              <h3>Teploty střídače</h3>
+              <div class="metric-item"><span class="metric-key">Vzduch</span><span class="metric-val" id="mTempAir">—</span></div>
+              <div class="metric-item"><span class="metric-key">Modul</span><span class="metric-val" id="mTempModule">—</span></div>
+              <div class="metric-item"><span class="metric-key">Chladič</span><span class="metric-val" id="mTempHeatsink">—</span></div>
+            </section>
+
+            <section class="metric-card metric-card-modes">
+              <h3>Režimy střídače / baterie</h3>
+              <div class="metric-item"><span class="metric-key">Režim práce</span><span class="metric-val" id="mWorkMode">—</span></div>
+              <div class="metric-item"><span class="metric-key">Režim sítě</span><span class="metric-val" id="mGridMode">—</span></div>
+              <div class="metric-item"><span class="metric-key">Režim baterie</span><span class="metric-val" id="mBatteryMode">—</span></div>
+            </section>
           </div>
         </div>
 

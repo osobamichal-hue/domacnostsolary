@@ -313,6 +313,11 @@ body {
   filter: none;
 }
 
+.flow-under-bat {
+  /* U baterie nechceme tmavou "masku", dělala svislý artefakt vedle měniče. */
+  stroke: rgba(6, 18, 16, 0.08);
+}
+
 [data-theme="light"] .flow-under {
   display: none;
 }
@@ -353,7 +358,7 @@ body {
   padding: 8px 10px;
   min-width: 108px;
   backdrop-filter: blur(8px);
-  z-index: 3;
+  z-index: 6;
 }
 
 [data-theme="light"] .label {
@@ -402,8 +407,9 @@ body {
 }
 
 .label-grid {
-  right: 12px;
-  top: 14px;
+  left: 86px;
+  top: 182px;
+  right: auto;
 }
 .label-grid::before {
   left: -24px;
@@ -633,6 +639,120 @@ body {
   border-radius: 12px;
 }
 
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.metric-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 10px;
+}
+
+.metric-card h3 {
+  margin: 0 0 8px;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.metric-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 3px 0;
+  border-bottom: 1px dashed rgba(128, 128, 128, 0.2);
+}
+
+.metric-item:last-child {
+  border-bottom: none;
+}
+
+.metric-key {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.metric-val {
+  color: var(--text);
+  font-weight: 600;
+  font-size: 0.8rem;
+  text-align: right;
+  max-width: 62%;
+  overflow-wrap: anywhere;
+}
+
+.live-metrics-grid {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+}
+
+.live-metrics-grid .metric-card {
+  position: absolute;
+  width: min(200px, calc(100% - 20px));
+  background: rgba(10, 12, 16, 0.5);
+  backdrop-filter: blur(8px);
+  pointer-events: auto;
+  padding: 8px;
+}
+
+.live-metrics-grid .metric-item {
+  align-items: baseline;
+  padding: 2px 0;
+}
+
+.live-metrics-grid .metric-card h3 {
+  font-size: 0.74rem;
+  margin-bottom: 6px;
+}
+
+.live-metrics-grid .metric-key {
+  font-size: 0.72rem;
+}
+
+.live-metrics-grid .metric-val {
+  font-size: 0.74rem;
+}
+
+.metric-card-phase {
+  left: 12px;
+  top: 14px;
+  width: min(172px, calc(100% - 20px));
+}
+
+.metric-card-temp {
+  right: 170px;
+  top: 255px;
+}
+
+.metric-card-modes {
+  right: 18px;
+  bottom: 90px;
+}
+
+.viz-wrap .label,
+.viz-wrap .live-metrics-grid .metric-card {
+  cursor: move;
+}
+
+.metric-card-phase .metric-key {
+  font-size: 0.7rem;
+}
+
+.metric-card-phase .metric-val {
+  font-size: 0.72rem;
+}
+
+[data-theme="light"] .live-metrics-grid .metric-card {
+  background: rgba(255, 255, 255, 0.5);
+  border-color: #cfd8e6;
+  box-shadow: 0 6px 18px rgba(17, 24, 39, 0.12);
+}
+
 /* Tablet */
 @media (max-width: 1024px) {
   .app {
@@ -647,6 +767,31 @@ body {
 
   .stats-page .summary-kpis {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .metrics-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .live-metrics-grid {
+    position: static;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin: 10px 0 4px;
+    pointer-events: auto;
+  }
+
+  .viz-wrap .label,
+  .viz-wrap .live-metrics-grid .metric-card {
+    cursor: default;
+  }
+
+  .live-metrics-grid .metric-card {
+    position: static;
+    width: auto;
+    background: var(--surface);
+    backdrop-filter: none;
   }
 
   .viz-wrap {
@@ -702,6 +847,31 @@ body {
   .stats-page .summary-kpis {
     grid-template-columns: 1fr 1fr;
     gap: 10px;
+  }
+
+  .metrics-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .live-metrics-grid {
+    position: static;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+    margin: 10px 0 4px;
+    pointer-events: auto;
+  }
+
+  .viz-wrap .label,
+  .viz-wrap .live-metrics-grid .metric-card {
+    cursor: default;
+  }
+
+  .live-metrics-grid .metric-card {
+    position: static;
+    width: auto;
+    background: var(--surface);
+    backdrop-filter: none;
   }
 
   .kpi-value {

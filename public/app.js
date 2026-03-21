@@ -2,8 +2,86 @@
 
 const $ = (id) => document.getElementById(id);
 const THEME_KEY = "homeapp_theme";
+const LAYOUT_KEY = "homeapp_live_layout_v1";
 let currentRange = "day";
 let lastBatterySoc = null;
+
+function readLayout() {
+  try {
+    return JSON.parse(localStorage.getItem(LAYOUT_KEY) || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function writeLayout(next) {
+  localStorage.setItem(LAYOUT_KEY, JSON.stringify(next));
+}
+
+function applySavedPosition(el, key) {
+  const map = readLayout();
+  const p = map[key];
+  if (!p) return;
+  if (typeof p.left === "number") el.style.left = `${p.left}px`;
+  if (typeof p.top === "number") el.style.top = `${p.top}px`;
+  el.style.right = "auto";
+  el.style.bottom = "auto";
+}
+
+function initDraggableLiveBlocks() {
+  const wrap = document.querySelector(".viz-wrap");
+  if (!wrap) return;
+
+  const targets = [
+    ["labelGrid", $("labelGrid")],
+    ["labelSolar", $("labelSolar")],
+    ["labelLoad", $("labelLoad")],
+    ["labelBat", $("labelBat")],
+    ["metricPhase", document.querySelector(".metric-card-phase")],
+    ["metricTemp", document.querySelector(".metric-card-temp")],
+    ["metricModes", document.querySelector(".metric-card-modes")],
+  ].filter(([, el]) => !!el);
+
+  for (const [key, el] of targets) {
+    applySavedPosition(el, key);
+    el.addEventListener("pointerdown", (ev) => {
+      if (ev.button !== 0) return;
+      if (window.matchMedia("(max-width: 1024px)").matches) return;
+      if (getComputedStyle(el).position !== "absolute") return;
+
+      const wrapRect = wrap.getBoundingClientRect();
+      const rect = el.getBoundingClientRect();
+      const shiftX = ev.clientX - rect.left;
+      const shiftY = ev.clientY - rect.top;
+
+      const move = (x, y) => {
+        const maxLeft = Math.max(0, wrapRect.width - rect.width);
+        const maxTop = Math.max(0, wrapRect.height - rect.height);
+        const left = Math.min(maxLeft, Math.max(0, x - wrapRect.left - shiftX));
+        const top = Math.min(maxTop, Math.max(0, y - wrapRect.top - shiftY));
+        el.style.left = `${left}px`;
+        el.style.top = `${top}px`;
+        el.style.right = "auto";
+        el.style.bottom = "auto";
+      };
+
+      const onMove = (e) => move(e.clientX, e.clientY);
+      const onUp = () => {
+        document.removeEventListener("pointermove", onMove);
+        document.removeEventListener("pointerup", onUp);
+        const left = Number.parseFloat(el.style.left || "0");
+        const top = Number.parseFloat(el.style.top || "0");
+        const map = readLayout();
+        map[key] = { left, top };
+        writeLayout(map);
+      };
+
+      document.addEventListener("pointermove", onMove);
+      document.addEventListener("pointerup", onUp, { once: true });
+      ev.preventDefault();
+    });
+  }
+}
 
 function updateHouseImages(soc) {
   const light = $("houseImgLight");
@@ -45,6 +123,15 @@ function formatPowerW(w) {
   const n = Number(w);
   if (Math.abs(n) >= 1000) return `${(n / 1000).toFixed(2)} kW`;
   return `${n.toFixed(0)} W`;
+}
+function formatTemp(v) {
+  if (v == null || Number.isNaN(Number(v))) return "—";
+  return `${Number(v).toFixed(1)} °C`;
+}
+function formatText(v) {
+  if (v == null) return "—";
+  const s = String(v).trim();
+  return s.length ? s : "—";
 }
 
 function formatKwh(v) {
@@ -187,6 +274,7 @@ function applyPayload(msg) {
   const payload = msg.payload || msg;
   const ok = msg.ok !== false && payload.ok !== false;
   const n = payload.normalized || {};
+  const s = payload.sensors || {};
 
   if (!ok && payload.error) {
     $("modelLine").textContent = String(payload.error);
@@ -216,6 +304,19 @@ function applyPayload(msg) {
   $("kpiProd").textContent = formatKwh(n.e_day_kwh);
   $("kpiCons").textContent = formatKwh(n.e_load_day_kwh);
   $("kpiIncome").textContent = formatCzk(income);
+
+  $("mLoadP1").textContent = formatPowerW(s.load_p1);
+  $("mLoadP2").textContent = formatPowerW(s.load_p2);
+  $("mLoadP3").textContent = formatPowerW(s.load_p3);
+  $("mGridP1").textContent = formatPowerW(s.active_power1);
+  $("mGridP2").textContent = formatPowerW(s.active_power2);
+  $("mGridP3").textContent = formatPowerW(s.active_power3);
+  $("mTempAir").textContent = formatTemp(s.temperature_air);
+  $("mTempModule").textContent = formatTemp(s.temperature_module);
+  $("mTempHeatsink").textContent = formatTemp(s.temperature);
+  $("mWorkMode").textContent = formatText(s.work_mode_label);
+  $("mGridMode").textContent = formatText(s.grid_mode_label || s.grid_in_out_label);
+  $("mBatteryMode").textContent = formatText(s.battery_mode_label);
 
   if (ok && payload.model_name) {
     $("modelLine").textContent = `${payload.model_name}${
@@ -281,6 +382,7 @@ function connectWs() {
 $("weatherTemp").textContent = "8 °C";
 initTheme();
 initRangeTabs();
+initDraggableLiveBlocks();
 
 fetch("/api/live")
   .then((r) => r.json())

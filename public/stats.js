@@ -38,6 +38,18 @@ function formatPct(v) {
   if (v == null || Number.isNaN(v)) return "—";
   return `${Number(v).toFixed(1)} %`;
 }
+function fmt(v, unit = "") {
+  if (v == null || Number.isNaN(Number(v))) return "—";
+  if (typeof v === "string" && !/^-?\d+(\.\d+)?$/.test(v)) return v;
+  const n = Number(v);
+  if (Math.abs(n) >= 1000 && unit === "W") return `${(n / 1000).toFixed(2)} kW`;
+  if (unit === "%") return `${n.toFixed(0)} %`;
+  if (unit === "Hz") return `${n.toFixed(2)} Hz`;
+  if (unit === "°C") return `${n.toFixed(1)} °C`;
+  if (unit === "kWh") return `${n.toFixed(2)} kWh`;
+  if (unit) return `${n.toFixed(1)} ${unit}`;
+  return `${n}`;
+}
 
 function drawLine(canvas, series, pick, color, min = null, max = null) {
   const ctx = canvas.getContext("2d");
@@ -134,6 +146,72 @@ function drawRatioChart(selfPct, gridPct) {
   ctx.fillText(`Spotřeba ze sítě: ${formatPct(gridPct)}`, x + 320, y - 12);
 }
 
+function metricItem(label, value) {
+  return `<div class="metric-item"><span class="metric-key">${label}</span><span class="metric-val">${value}</span></div>`;
+}
+
+function metricCard(title, items) {
+  return `<section class="metric-card"><h3>${title}</h3>${items.join("")}</section>`;
+}
+
+async function loadDetailedMetrics() {
+  const r = await fetch("/api/live");
+  const j = await r.json();
+  if (!r.ok || j.ok === false) return;
+  const s = j.sensors || {};
+  const grid = metricCard("Panely a síť", [
+    metricItem("PV1 napětí", fmt(s.vpv1, "V")),
+    metricItem("PV1 proud", fmt(s.ipv1, "A")),
+    metricItem("PV2 napětí", fmt(s.vpv2, "V")),
+    metricItem("PV2 proud", fmt(s.ipv2, "A")),
+    metricItem("Síť L1 napětí", fmt(s.vgrid, "V")),
+    metricItem("Síť L1 proud", fmt(s.igrid, "A")),
+  ]);
+  const freq = metricCard("Frekvence", [
+    metricItem("Síť L1", fmt(s.fgrid, "Hz")),
+    metricItem("Síť L2", fmt(s.fgrid2, "Hz")),
+    metricItem("Síť L3", fmt(s.fgrid3, "Hz")),
+  ]);
+  const phasePower = metricCard("Výkon po fázích", [
+    metricItem("Load L1", fmt(s.load_p1, "W")),
+    metricItem("Load L2", fmt(s.load_p2, "W")),
+    metricItem("Load L3", fmt(s.load_p3, "W")),
+    metricItem("Grid P1", fmt(s.active_power1, "W")),
+    metricItem("Grid P2", fmt(s.active_power2, "W")),
+    metricItem("Grid P3", fmt(s.active_power3, "W")),
+  ]);
+  const temp = metricCard("Teploty střídače", [
+    metricItem("Teplota vzduch", fmt(s.temperature_air, "°C")),
+    metricItem("Teplota modul", fmt(s.temperature_module, "°C")),
+    metricItem("Teplota chladič", fmt(s.temperature, "°C")),
+  ]);
+  const modes = metricCard("Režimy střídače/baterie", [
+    metricItem("Režim práce", fmt(s.work_mode_label)),
+    metricItem("Režim sítě", fmt(s.grid_mode_label || s.grid_in_out_label)),
+    metricItem("Režim baterie", fmt(s.battery_mode_label)),
+  ]);
+  const diag = metricCard("Chyby a diagnostika", [
+    metricItem("Warning code", fmt(s.warning_code)),
+    metricItem("Error codes", fmt(s.error_codes)),
+    metricItem("Diag status", fmt(s.diagnose_result_label || s.diagnose_result)),
+  ]);
+  const energy = metricCard("Denní / životní energie", [
+    metricItem("PV den", fmt(s.e_day, "kWh")),
+    metricItem("PV celkem", fmt(s.e_total, "kWh")),
+    metricItem("Load den", fmt(s.e_load_day, "kWh")),
+    metricItem("Load celkem", fmt(s.e_load_total, "kWh")),
+    metricItem("Export den", fmt(s.e_day_exp, "kWh")),
+    metricItem("Export celkem", fmt(s.e_total_exp, "kWh")),
+    metricItem("Import den", fmt(s.e_day_imp, "kWh")),
+    metricItem("Import celkem", fmt(s.e_total_imp, "kWh")),
+    metricItem("Bat charge den", fmt(s.e_bat_charge_day, "kWh")),
+    metricItem("Bat charge celkem", fmt(s.e_bat_charge_total, "kWh")),
+    metricItem("Bat discharge den", fmt(s.e_bat_discharge_day, "kWh")),
+    metricItem("Bat discharge celkem", fmt(s.e_bat_discharge_total, "kWh")),
+  ]);
+  $("metricsGrid").innerHTML = [grid, freq, phasePower, temp, modes, diag, energy].join("");
+}
+
 async function loadStats() {
   const r = await fetch(`/api/stats?range=${encodeURIComponent(currentRange)}`);
   const j = await r.json();
@@ -174,4 +252,6 @@ function bindTabs() {
   bindTabs();
   $("statsExportXls").href = `/api/export/xls?range=${encodeURIComponent(currentRange)}`;
   await Promise.all([loadStats(), loadSeries()]);
+  await loadDetailedMetrics();
+  setInterval(loadDetailedMetrics, 15000);
 })();
