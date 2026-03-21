@@ -58,29 +58,62 @@ function formatEur(v) {
 }
 
 function setFlowIntensity(paths, solarW, loadW, batW, gridW) {
-  const th = (w) => {
-    const a = Math.min(1, Math.abs(Number(w) || 0) / 4000);
-    return 0.15 + a * 0.85;
+  const sw = Number(solarW || 0);
+  const lw = Number(loadW || 0);
+  const bw = Number(batW || 0);
+  const gw = Number(gridW || 0);
+
+  const th = (w, floor = 0.42, scale = 5000) => {
+    const a = Math.min(1, Math.abs(Number(w) || 0) / scale);
+    return floor + a * (1 - floor);
   };
-  paths.pvInv.style.opacity = String(th(solarW));
-  paths.invLoad.style.opacity = String(th(loadW));
-  paths.invBat.style.opacity = String(th(batW));
-  paths.invGrid.style.opacity = String(th(gridW));
+  const speed = (w) => {
+    const a = Math.min(1, Math.abs(Number(w) || 0) / 4500);
+    return `${1.15 - a * 0.65}s`;
+  };
+
+  // Přibližné rozdělení napájení zátěže podle okamžitých toků.
+  const loadDemand = Math.max(0, lw);
+  const gridImport = Math.max(0, -gw);
+  const batDischarge = Math.max(0, bw);
+  const pvAvail = Math.max(0, sw);
+
+  const gridToLoad = Math.min(loadDemand, gridImport);
+  let restLoad = Math.max(0, loadDemand - gridToLoad);
+  const batToLoad = Math.min(restLoad, batDischarge);
+  restLoad = Math.max(0, restLoad - batToLoad);
+  const pvToLoad = Math.min(restLoad, pvAvail);
+
+  const inverterToLoad = pvToLoad + batToLoad + gridToLoad;
+  const gridBranchFlow = Math.abs(gw);
+  const batteryBranchFlow = Math.abs(bw);
+  const pvBranchFlow = Math.abs(sw);
+
+  paths.pvInv.style.opacity = String(th(pvBranchFlow));
+  paths.invLoad.style.opacity = String(th(inverterToLoad, 0.38, 4500));
+  paths.invBat.style.opacity = String(th(batteryBranchFlow));
+  paths.invGrid.style.opacity = String(th(gridBranchFlow));
+  paths.pvInv.style.animationDuration = speed(pvBranchFlow);
+  paths.invLoad.style.animationDuration = speed(inverterToLoad);
+  paths.invBat.style.animationDuration = speed(batteryBranchFlow);
+  paths.invGrid.style.animationDuration = speed(gridBranchFlow);
 
   const dim = (el, w) => {
-    el.classList.toggle("dim", !w || Math.abs(w) < 5);
+    el.classList.toggle("dim", !w || Math.abs(w) < 8);
   };
-  dim(paths.pvInv, solarW);
-  dim(paths.invLoad, loadW);
-  dim(paths.invBat, batW);
-  dim(paths.invGrid, gridW);
+  dim(paths.pvInv, pvBranchFlow);
+  dim(paths.invLoad, inverterToLoad);
+  dim(paths.invBat, batteryBranchFlow);
+  dim(paths.invGrid, gridBranchFlow);
 
   // Směr toku:
   // - grid_w > 0: export do sítě (inverter -> sloup), < 0: import ze sítě (sloup -> inverter)
   // - battery_w < 0: nabíjení baterie (inverter -> baterie), > 0: vybíjení (baterie -> inverter)
-  paths.invGrid.classList.toggle("reverse", Number(gridW || 0) < 0);
-  const bw = Number(batW || 0);
+  // - load_w > 0: dodávka do domácnosti (inverter -> dům), < 0: opačný tok (vzácné)
+  paths.pvInv.classList.toggle("reverse", sw < 0);
+  paths.invGrid.classList.toggle("reverse", gw < 0);
   paths.invBat.classList.toggle("reverse", bw > 0);
+  paths.invLoad.classList.toggle("reverse", lw < 0);
 }
 
 const paths = {
