@@ -10,6 +10,14 @@ Cílem je mít jednoduchý a opakovatelný proces:
 - restart služby (`systemd`),
 - ověření, že aplikace běží.
 
+### Co musí na serveru běžet (HomeAPP)
+
+- **Node** — obsluha HTTP, WebSocket, **periodické dotazování střídače** a zápis do MySQL. Sběr dat probíhá i bez otevřeného webu; prohlížeč jen zobrazuje data z API.
+- **Python 3** — skript `python/fetch_runtime.py` (knihovna GoodWe); cesta k interpreteru v konfiguraci (`pythonExe` / `PYTHON_EXE`).
+- **MySQL/MariaDB** — schéma tabulek se vytvoří při **prvním startu** aplikace (žádné samostatné migrační CLI jako u některých frameworků).
+
+Síť: stroj s HomeAPP musí dosáhnout na **IP střídače** v LAN (typicky UDP port **8899**). Volitelně druhý zdroj přes Playwright (`LAN_WEB_*`) — viz kořenový [`.env.example`](.env.example).
+
 ## 1) Repozitář a branch strategie
 
 - Používej minimálně dvě větve: `main` (produkce) a `develop` (vývoj).
@@ -76,9 +84,10 @@ git checkout main
 ## 6) Konfigurace mimo Git
 
 - Necommituj tajemství (`.env`, klíče, hesla) do repozitáře.
-- Produkční konfiguraci drž v souboru `.env.production`.
+- Zkopíruj vzor: `cp .env.example .env` (nebo `.env.production` pro produkci) a vyplň hodnoty na cílovém stroji.
+- Produkční soubor můžeš pojmenovat `.env.production` a načíst ho ve službě přes `EnvironmentFile=` (viz krok 7).
 - Zajisti, aby citlivé soubory byly v `.gitignore`.
-- Přidej databázové proměnné pro MySQL (např. `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`).
+- Přidej databázové proměnné pro MySQL (`DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`) a **`GOODWE_HOST`** (IP střídače).
 
 ## 6.1) Inicializace MySQL databáze
 
@@ -95,16 +104,41 @@ GRANT ALL PRIVILEGES ON homeapp_prod.* TO 'homeapp_user'@'localhost';
 FLUSH PRIVILEGES;
 ```
 
-Do `.env.production` nastav odpovídající údaje a ověř připojení aplikace.
+Do `.env` nebo `.env.production` nastav odpovídající údaje a ověř připojení aplikace.
+
+## 6.2) Python závislosti (GoodWe)
+
+V kořeni klonu (jako uživatel s oprávněním k projektu):
+
+```bash
+cd ~/apps/homeapp
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+V `.env` nastav např. `PYTHON_EXE=/home/deploy/apps/homeapp/.venv/bin/python`, aby služba používala stejný interpreter.
+
+Volitelně **LAN web** (Playwright): `pip install -r python/requirements-lan.txt` a podle dokumentace Playwright i `playwright install` (chromium). Vyžaduje proměnné `LAN_WEB_USER`, `LAN_WEB_PASSWORD` a případně další z [`.env.example`](.env.example).
 
 ## 7) Spuštění aplikace přes systemd
 
+Nejdřív jednorázově v adresáři projektu:
+
+```bash
+cd ~/apps/homeapp
+npm ci --omit=dev
+```
+
 Vytvoř službu `/etc/systemd/system/homeapp.service` s minimálně těmito položkami:
+
 - `User=deploy`
 - `WorkingDirectory=/home/deploy/apps/homeapp`
-- `ExecStart=` podle stacku (např. `npm run start` nebo `python3 app.py`)
+- `ExecStart=/usr/bin/node /home/deploy/apps/homeapp/server/index.js`  
+  (cestu k `node` ověř příkazem `which node`; alternativně `ExecStart=/usr/bin/npm start` s `PATH` vhodně nastaveným přes `Environment=`)
 - `Restart=always`
-- `EnvironmentFile=/home/deploy/apps/homeapp/.env.production`
+- `EnvironmentFile=-/home/deploy/apps/homeapp/.env.production`  
+  (případně `.env`; pomlčka znamená, že chybějící soubor nezhodí službu)
 
 Aktivace služby:
 
@@ -113,6 +147,12 @@ sudo systemctl daemon-reload
 sudo systemctl enable homeapp
 sudo systemctl start homeapp
 systemctl status homeapp
+```
+
+Ověření z jiného terminálu (nahraď host/port podle nasazení):
+
+```bash
+curl -sS http://127.0.0.1:3000/api/health | head
 ```
 
 ## 8) Manuální deploy postup
@@ -125,38 +165,19 @@ git checkout main
 git pull --ff-only origin main
 ```
 
-Podle stacku nainstaluj závislosti:
-
 ```bash
-# Node.js
 npm ci --omit=dev
-
-# Python
+# Python venv (stejná cesta jako v PYTHON_EXE)
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Před migracemi doporučení:
-- vytvoř zálohu databáze,
-- spusť migrace s minimálním výpadkem,
-- až po úspěšných migracích restartuj službu.
+HomeAPP **nevytváří schéma přes externí migrační příkaz** — tabulky se založí při startu Node, pokud chybí. Před aktualizací kódu z `git pull` je rozumné zálohovat databázi (změny schématu v novější verzi jsou řešeny v `server/db.js` při startu).
 
-Záloha MySQL před migrací:
+Záloha MySQL před aktualizací:
 
 ```bash
 mysqldump -u homeapp_user -p homeapp_prod > ~/db-backups/homeapp_prod_$(date +%F_%H-%M).sql
-```
-
-Spuštění migrací (příklady podle frameworku):
-
-```bash
-# Django
-python manage.py migrate --noinput
-
-# Laravel
-php artisan migrate --force
-
-# Sequelize (Node.js)
-npx sequelize-cli db:migrate
 ```
 
 Potom:
@@ -170,10 +191,10 @@ journalctl -u homeapp -n 100 --no-pager
 
 Vytvoř `deploy.sh`, který provede kroky:
 1. fetch/pull,
-2. instalaci závislostí,
-3. migrace,
+2. instalaci závislostí (`npm ci`, případně `pip install -r requirements.txt`),
+3. volitelná záloha MySQL,
 4. restart služby,
-5. kontrolu logů.
+5. kontrolu logů (`journalctl`).
 
 ## 10) Rollback plán
 

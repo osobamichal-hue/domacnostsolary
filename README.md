@@ -66,6 +66,21 @@ Ukonfigurované hodnoty z rozhraní **Nastavení** se ukládají do **`data/app-
 - **Autentizace**: cookie session (`homeapp_session`), chráněné cesty vyžadují přihlášení.
 - **CORS**: povolené s `credentials` kvůli volání API z jiného originu (viz níže).
 
+### Sběr dat bez otevřeného webu
+
+Dotazování střídače běží **uvnitř Node procesu** (`setInterval` po startu serveru). **Prohlížeč ani otevřená stránka nejsou potřeba** — stačí běžící server (např. jako služba pod `systemd`). Data se ukládají do MySQL i když není připojen žádný klient; WebSocket jen doručuje nové vzorky těm, kdo mají UI otevřené.
+
+Kromě Node musí být dostupný **Python** s závislostmi z `requirements.txt` a síťový dosah na **IP střídače** (`GOODWE_HOST` / Nastavení). Volitelný LAN web (Playwright) má další závislosti — viz `python/requirements-lan.txt` a proměnné `LAN_WEB_*` v [`.env.example`](.env.example).
+
+### Přehled — barvy hodnot Síť a Zátěž
+
+Na hlavním přehledu se barva číselné hodnoty mění podle velikosti:
+
+| Prvek | Pravidlo |
+|--------|----------|
+| **Síť** | Záporný výkon (odběr ze sítě) je zvýrazněn červeně. |
+| **Zátěž** | Podle absolutní hodnoty ve wattech: do 800 W zelená, do 1,5 kW žlutá, do 2,2 kW oranžová, od 2,2 kW výše červená. |
+
 ---
 
 ## Frontend a Apache / AMPPS
@@ -145,6 +160,7 @@ Klientská aplikace pro telefon je ve složce **`android/`** — sestavení a ch
 | Nelze se přihlásit po změně URL | `localStorage.removeItem('homeapp_api_base')`, pak otevřít z `http://localhost:3000` |
 | `EADDRINUSE :3000` | Jiný proces na portu — ukončit nebo změnit `PORT` |
 | Python / GoodWe chyba | Ověřit `GOODWE_HOST`, firewall, že Python najde závislosti pro `fetch_runtime.py` |
+| Žádné nové záznamy v DB / přehled „zamrzne“ | Zkontrolovat, že běží **Node** (`systemctl status` na serveru); prohlížeč nemusí být otevřený |
 
 ---
 
