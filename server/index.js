@@ -16,6 +16,9 @@ const {
   latestReading,
   recentSeries,
   statsByPreset,
+  statsSnapshot,
+  statsBreakdown,
+  statsMonthlyMatrix,
   rowsForRange,
   createUser,
   getUserByUsername,
@@ -24,7 +27,7 @@ const {
   deleteSessionByTokenHash,
   pruneExpiredSessions,
 } = require("./db");
-const { fetchFromInverter } = require("./poller");
+const { fetchFromInverter, fetchFromLanWeb } = require("./poller");
 const { createConfigStore } = require("./configStore");
 
 const PORT = Number(process.env.PORT || 3000);
@@ -33,7 +36,12 @@ const DATA_DIR = path.join(__dirname, "..", "data");
 const config = createConfigStore(DATA_DIR);
 
 const app = express();
-app.use(cors());
+app.use(
+  cors({
+    origin: true,
+    credentials: true,
+  })
+);
 app.use(express.json());
 
 const dbPromise = openDb(DATA_DIR);
@@ -240,9 +248,14 @@ app.put("/api/config", (req, res) => {
 
 app.get("/api/health", (_req, res) => {
   const c = config.get();
+  const lanUser = String(process.env.LAN_WEB_USER || "").trim();
+  const lanPass = String(process.env.LAN_WEB_PASSWORD || "").trim();
   res.json({
     ok: true,
     goodweHostConfigured: Boolean(c.goodweHost),
+    lanWebEnabled: Boolean(c.lanWebEnabled),
+    lanWebBaseUrlConfigured: Boolean(c.lanWebBaseUrl),
+    lanWebCredentialsConfigured: Boolean(lanUser && lanPass),
     pollIntervalMs: c.pollIntervalMs,
     port: PORT,
   });
@@ -283,6 +296,23 @@ app.get("/api/series", async (req, res) => {
   }
 });
 
+function seriesBucketT(range, ts) {
+  const d = new Date(ts);
+  if (range === "month") {
+    d.setDate(1);
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
+  }
+  if (range === "year") {
+    d.setMonth(0, 1);
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
+  }
+  const bucketMs =
+    range === "day" ? 5 * 60 * 1000 : 15 * 60 * 1000;
+  return Math.floor(ts / bucketMs) * bucketMs;
+}
+
 app.get("/api/series-range", async (req, res) => {
   try {
     const db = await dbPromise;
@@ -290,13 +320,21 @@ app.get("/api/series-range", async (req, res) => {
     const { fromTs, toTs } = getRangeBounds(range, Date.now());
     const raw = (await rowsForRange(db, fromTs, toTs, 250000)).filter((r) => r.ok);
 
-    let bucketMs = 15 * 60 * 1000;
-    if (range === "day") bucketMs = 5 * 60 * 1000;
-    if (range === "year") bucketMs = 24 * 60 * 60 * 1000;
+    const bucketMs =
+      range === "day"
+        ? 5 * 60 * 1000
+        : range === "month"
+          ? 31 * 24 * 60 * 60 * 1000
+          : range === "year"
+            ? 366 * 24 * 60 * 60 * 1000
+            : 15 * 60 * 1000;
+
+    const bucketKind =
+      range === "month" ? "calendarMonth" : range === "year" ? "calendarYear" : "time";
 
     const buckets = new Map();
     for (const r of raw) {
-      const b = Math.floor(r.ts / bucketMs) * bucketMs;
+      const b = seriesBucketT(range, r.ts);
       if (!buckets.has(b)) {
         buckets.set(b, {
           t: b,
@@ -332,7 +370,7 @@ app.get("/api/series-range", async (req, res) => {
         battery_soc_pct: b.socCount ? b.battery_soc_pct / b.socCount : null,
       }));
 
-    res.json({ range, bucketMs, series });
+    res.json({ range, bucketMs, bucketKind, series });
   } catch (e) {
     res.status(400).json({ ok: false, error: String(e.message || e) });
   }
@@ -350,6 +388,66 @@ app.get("/api/stats", async (req, res) => {
       ...s,
       estimatedIncomeCzk: income,
     });
+  } catch (e) {
+    res.status(400).json({ ok: false, error: String(e.message || e) });
+  }
+});
+
+app.get("/api/stats/snapshot", async (req, res) => {
+  try {
+    const db = await dbPromise;
+    const s = await statsSnapshot(db, Date.now());
+    const fi = getFeedIn();
+    const withIncome = (b) => {
+      if (!b || b.samples === 0) return { ...b, estimatedIncomeCzk: null };
+      const income =
+        b.productionKwh != null ? Number(b.productionKwh) * fi : null;
+      return { ...b, estimatedIncomeCzk: income };
+    };
+    const all = s.allTime || {};
+    const { firstDataTs, lastDataTs, ...allRest } = all;
+    const allWithIncome = withIncome(allRest);
+    res.json({
+      ok: true,
+      nowTs: s.nowTs,
+      day: withIncome(s.day),
+      month: withIncome(s.month),
+      year: withIncome(s.year),
+      allTime: {
+        ...allWithIncome,
+        firstDataTs: firstDataTs ?? null,
+        lastDataTs: lastDataTs ?? null,
+      },
+    });
+  } catch (e) {
+    res.status(400).json({ ok: false, error: String(e.message || e) });
+  }
+});
+
+app.get("/api/stats/breakdown", async (req, res) => {
+  try {
+    const db = await dbPromise;
+    const g = String(req.query.granularity || "years").toLowerCase();
+    const year = req.query.year != null ? Number(req.query.year) : undefined;
+    const month = req.query.month != null ? Number(req.query.month) : undefined;
+    const b = await statsBreakdown(db, g, year, month, Date.now());
+    const fi = getFeedIn();
+    const items = (b.items || []).map((it) => ({
+      ...it,
+      estimatedIncomeCzk:
+        it.productionKwh != null ? Number(it.productionKwh) * fi : null,
+    }));
+    res.json({ ok: true, ...b, items });
+  } catch (e) {
+    res.status(400).json({ ok: false, error: String(e.message || e) });
+  }
+});
+
+app.get("/api/stats/monthly-matrix", async (req, res) => {
+  try {
+    const db = await dbPromise;
+    const m = await statsMonthlyMatrix(db, Date.now());
+    res.json({ ok: true, ...m });
   } catch (e) {
     res.status(400).json({ ok: false, error: String(e.message || e) });
   }
@@ -422,8 +520,52 @@ async function pollOnce() {
   }
   try {
     const db = await dbPromise;
-    const payload = await fetchFromInverter(c.pythonExe, c.goodweHost);
-    const ok = Boolean(payload.ok);
+    const gwPayload = await fetchFromInverter(c.pythonExe, c.goodweHost);
+    let payload = { ...gwPayload };
+    const lanWanted =
+      Boolean(c.lanWebEnabled) && String(c.lanWebBaseUrl || "").trim().length > 0;
+    if (lanWanted) {
+      const lanUser = String(process.env.LAN_WEB_USER || "").trim();
+      const lanPass = String(process.env.LAN_WEB_PASSWORD || "").trim();
+      if (!lanUser || !lanPass) {
+        payload = {
+          ...payload,
+          lan_web: {
+            ok: false,
+            error:
+              "Chybí LAN_WEB_USER nebo LAN_WEB_PASSWORD v prostředí serveru (.env).",
+            source: "lan_web",
+          },
+        };
+      } else {
+        const lanEnv = {
+          LAN_WEB_BASE_URL: String(c.lanWebBaseUrl).trim(),
+          LAN_WEB_USER: lanUser,
+          LAN_WEB_PASSWORD: lanPass,
+        };
+        const lp = String(c.lanWebLoginPath || "").trim();
+        if (lp) lanEnv.LAN_WEB_LOGIN_PATH = lp;
+        const dp = String(c.lanWebDataPath || "").trim();
+        if (dp) lanEnv.LAN_WEB_DATA_PATH = dp;
+        const ap = String(c.lanWebAltPath || "").trim();
+        if (ap) lanEnv.LAN_WEB_ALT_PATH = ap;
+        try {
+          const lan = await fetchFromLanWeb(c.pythonExe, lanEnv);
+          payload = { ...payload, lan_web: lan };
+        } catch (e) {
+          payload = {
+            ...payload,
+            lan_web: {
+              ok: false,
+              error: String(e.message || e),
+              source: "lan_web",
+            },
+          };
+        }
+      }
+    }
+    // Úspěch řádku = jen GoodWe (střídač). Selhání A-ZROUTER (Playwright) nesmí shodit živá data ani „Chyba čtení“.
+    const ok = Boolean(gwPayload.ok);
     await insertReading(db, ok, payload);
     broadcast({
       type: "reading",

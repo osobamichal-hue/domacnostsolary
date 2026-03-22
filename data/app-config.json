@@ -2,5 +2,10 @@
   "goodweHost": "192.168.5.67",
   "pollIntervalMs": 15000,
   "feedInCzkPerKwh": 0.5,
-  "pythonExe": "py"
+  "pythonExe": "py",
+  "lanWebEnabled": true,
+  "lanWebBaseUrl": "http://192.168.5.54",
+  "lanWebLoginPath": "#/login",
+  "lanWebDataPath": "#/devices",
+  "lanWebAltPath": "#/"
 }

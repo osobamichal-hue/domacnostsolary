@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="cs" data-energy-flow="on">
+<html lang="cs">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -35,10 +35,8 @@
             <span class="weather-icon" aria-hidden="true">⛅</span>
             <span id="weatherTemp">—</span>
           </div>
-          <div class="range-tabs">
-            <button type="button" class="tab active" data-range="day">Den</button>
-            <button type="button" class="tab" data-range="month">Měsíc</button>
-            <button type="button" class="tab" data-range="year">Rok</button>
+          <div class="range-label" title="Souhrny za měsíc a rok jsou ve Statistikách">
+            <span class="range-label-text">Denní přehled</span>
           </div>
         </div>
         <div class="summary-kpis">
@@ -62,17 +60,22 @@
         <h2 class="section-title">Živá data</h2>
         <div class="viz-wrap">
           <div class="viz-stage">
-          <img id="houseImgLight" class="house-img house-img-light" src="/pict/DumSvetla.png" alt="" aria-hidden="true" />
-          <img id="houseImgDark" class="house-img house-img-dark" src="/pict/DumTmava.png" alt="" aria-hidden="true" />
+          <img id="houseImgLight" class="house-img house-img-light" src="/pict/toky/Svetle_bez_drah_01.png" alt="" aria-hidden="true" />
+          <img id="houseImgDark" class="house-img house-img-dark" src="/pict/toky/Tmavé_bez_drah_01.png" alt="" aria-hidden="true" />
 
-          <svg class="energy-viz" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <svg
+            class="energy-viz energy-viz-flows"
+            viewBox="0 0 1042 1024"
+            xmlns="http://www.w3.org/2000/svg"
+            aria-hidden="true"
+          >
             <defs>
-              <linearGradient id="flowGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <linearGradient id="flowGradPv" x1="0%" y1="0%" x2="100%" y2="0%">
                 <stop offset="0%" stop-color="#137534" />
                 <stop offset="50%" stop-color="#49ff84" />
                 <stop offset="100%" stop-color="#137534" />
               </linearGradient>
-              <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+              <filter id="glowPv" x="-50%" y="-50%" width="200%" height="200%">
                 <feGaussianBlur stdDeviation="5.2" result="b" />
                 <feMerge>
                   <feMergeNode in="b" />
@@ -80,15 +83,50 @@
                 </feMerge>
               </filter>
             </defs>
-
-            <path class="flow-under" d="M 556 585 L 304 585 L 304 435 C 304 412 289 398 258 386" fill="none" />
-            <path id="pathInvGrid" class="flow-path" d="M 556 585 L 304 585 L 304 435 C 304 412 289 398 258 386" fill="none" />
-            <path class="flow-under" d="M 644 430 C 614 468 570 532 534 586" fill="none" />
-            <path id="pathPvInv" class="flow-path" d="M 644 430 C 614 468 570 532 534 586" fill="none" />
-            <path class="flow-under flow-under-bat" d="M 526 628 L 526 786" fill="none" />
-            <path id="pathInvBat" class="flow-path" d="M 526 628 L 526 786" fill="none" />
-            <path class="flow-under" d="M 554 585 L 474 585 L 474 772 L 302 772 L 302 620" fill="none" />
-            <path id="pathInvLoad" class="flow-path" d="M 554 585 L 474 585 L 474 772 L 302 772 L 302 620" fill="none" />
+            <path
+              class="flow-under flow-under-pv"
+              d="M 655.6 430 C 624.7 468 579.7 532 543.3 586"
+              fill="none"
+            />
+            <path
+              id="pathPvInv"
+              class="flow-path flow-path-pv"
+              d="M 655.6 430 C 624.7 468 579.7 532 543.3 586"
+              fill="none"
+            />
+            <path
+              class="flow-under flow-under-bat"
+              d="M 535.1 650 L 535.1 762"
+              fill="none"
+            />
+            <path
+              id="pathInvBat"
+              class="flow-path flow-path-bat"
+              d="M 535.1 650 L 535.1 762"
+              fill="none"
+            />
+            <path
+              class="flow-under flow-under-load"
+              d="M 565.8 585 L 482.2 585 L 482.2 772 L 307.4 772 L 307.4 620"
+              fill="none"
+            />
+            <path
+              id="pathInvLoad"
+              class="flow-path flow-path-load"
+              d="M 565.8 585 L 482.2 585 L 482.2 772 L 307.4 772 L 307.4 620"
+              fill="none"
+            />
+            <path
+              class="flow-under flow-under-grid"
+              d="M 565.8 585 L 309.4 585 L 309.4 435 C 309.4 412 294.1 398 262.4 386"
+              fill="none"
+            />
+            <path
+              id="pathInvGrid"
+              class="flow-path flow-path-grid"
+              d="M 565.8 585 L 309.4 585 L 309.4 435 C 309.4 412 294.1 398 262.4 386"
+              fill="none"
+            />
           </svg>
 
           <div class="label label-grid" id="labelGrid">
@@ -104,9 +142,17 @@
             <span class="label-val" id="valLoad">—</span>
           </div>
           <div class="label label-bat" id="labelBat">
-            <span class="label-title">Baterie</span>
-            <span class="label-val" id="valBat">—</span>
-            <span class="label-sub" id="valBatSoc">—</span>
+            <div class="label-bat-bar" aria-hidden="true">
+              <div class="bat-soc-bar">
+                <div class="bat-soc-bar__track"></div>
+                <div class="bat-soc-bar__fill" id="batSocBarFill"></div>
+              </div>
+            </div>
+            <div class="label-bat-main">
+              <span class="label-title">Baterie</span>
+              <span class="label-val" id="valBat">—</span>
+              <span class="label-sub label-sub--bat-soc" id="valBatSoc">—</span>
+            </div>
           </div>
           </div>
 
@@ -134,21 +180,84 @@
               <div class="metric-item"><span class="metric-key">Režim sítě</span><span class="metric-val" id="mGridMode">—</span></div>
               <div class="metric-item"><span class="metric-key">Režim baterie</span><span class="metric-val" id="mBatteryMode">—</span></div>
             </section>
+
+            <section class="metric-card metric-card-boiler" id="metricCardBoiler" aria-label="Bojler">
+              <div class="boiler-card__head">
+                <svg class="boiler-card__icon-svg" viewBox="0 0 56 56" aria-hidden="true" width="36" height="36">
+                  <ellipse cx="28" cy="13" rx="17" ry="9" fill="currentColor" opacity="0.35" />
+                  <rect x="11" y="13" width="34" height="26" rx="7" fill="currentColor" />
+                  <rect x="23" y="36" width="10" height="9" rx="2" fill="currentColor" opacity="0.85" />
+                  <circle cx="28" cy="25" r="4" fill="#ffffff" opacity="0.28" />
+                </svg>
+                <div class="boiler-card__titles">
+                  <h3>Bojler</h3>
+                </div>
+              </div>
+
+              <div class="boiler-card__temp-main" id="boilerTempMain">
+                <span id="boilerTempCurr" class="boiler-temp-curr">—</span>
+                <span class="boiler-temp-slash" id="boilerTempSlash">/</span>
+                <span id="boilerTempTarget" class="boiler-temp-tgt">—</span>
+                <span class="boiler-card__temp-unit">°C</span>
+              </div>
+              <p class="boiler-card__temp-caption">voda / cíl (LAN)</p>
+
+              <div class="boiler-card__status boiler-card__status--unknown" id="boilerStatusRow">
+                <span class="boiler-card__dot" aria-hidden="true"></span>
+                <span id="boilerStatusText">stav —</span>
+              </div>
+              <p class="boiler-card__heat" id="boilerHeatLine"></p>
+
+              <div class="boiler-phase-stack" title="Výkon zátěže po fázích ze střídače (Load L1–L3)">
+                <div class="boiler-phase-row">
+                  <span class="boiler-phase-label">L1</span>
+                  <div class="boiler-hbar">
+                    <div class="boiler-hbar__track">
+                      <div class="boiler-hbar__fill" id="boilerThermoFill1"></div>
+                    </div>
+                  </div>
+                  <span class="boiler-phase-w" id="boilerW1">—</span>
+                </div>
+                <div class="boiler-phase-row">
+                  <span class="boiler-phase-label">L2</span>
+                  <div class="boiler-hbar">
+                    <div class="boiler-hbar__track">
+                      <div class="boiler-hbar__fill" id="boilerThermoFill2"></div>
+                    </div>
+                  </div>
+                  <span class="boiler-phase-w" id="boilerW2">—</span>
+                </div>
+                <div class="boiler-phase-row">
+                  <span class="boiler-phase-label">L3</span>
+                  <div class="boiler-hbar">
+                    <div class="boiler-hbar__track">
+                      <div class="boiler-hbar__fill" id="boilerThermoFill3"></div>
+                    </div>
+                  </div>
+                  <span class="boiler-phase-w" id="boilerW3">—</span>
+                </div>
+              </div>
+            </section>
           </div>
         </div>
 
         <div class="model-line" id="modelLine"></div>
+        <div class="model-line model-line--secondary" id="lanWebLine" hidden></div>
       </section>
 
       <section class="chart-section" aria-label="Historie výkonu">
         <div class="section-row">
-          <h2 class="section-title">Výkon (živé vzorky)</h2>
-          <a id="exportXlsBtn" class="export-link" href="/api/export/xls?range=day">Export XLS</a>
+          <div>
+            <h2 class="section-title">Výkon za dnešní den</h2>
+            <p class="chart-section-hint">Průměrný výkon FV v 5min intervalech (data z databáze, obnovuje se automaticky).</p>
+          </div>
+          <a id="exportXlsBtn" class="export-link" href="#">Export XLS</a>
         </div>
         <canvas id="chart" width="800" height="200"></canvas>
       </section>
     </div>
 
+    <script src="api-base.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

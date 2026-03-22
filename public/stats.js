@@ -1,3 +1,4 @@
+/* global apiFetch, apiUrl */
 const $ = (id) => document.getElementById(id);
 const THEME_KEY = "homeapp_theme";
 let currentRange = "day";
@@ -12,6 +13,7 @@ function applyTheme(theme) {
   const btn = $("themeToggle");
   if (btn) btn.textContent = theme === "light" ? "🌞" : "🌙";
   drawCharts(window.__lastSeries || []);
+  redrawDetailBars();
 }
 
 function initTheme() {
@@ -26,10 +28,16 @@ function initTheme() {
   });
 }
 
+function redrawDetailBars() {
+  if (window.__lastBreakdownYears) drawBarChart($("barYears"), window.__lastBreakdownYears, "productionKwh", "label", cssVar("--accent", "#3dff7a"));
+  if (window.__lastBreakdownMonths) drawBarChart($("barMonths"), window.__lastBreakdownMonths, "productionKwh", "label", "#34d399");
+  if (window.__lastBreakdownDays) drawBarChart($("barDays"), window.__lastBreakdownDays, "productionKwh", "label", "#60a5fa");
+}
+
 function initLogout() {
   $("logoutBtn")?.addEventListener("click", async () => {
     try {
-      await fetch("/api/auth/logout", { method: "POST" });
+      await apiFetch("/api/auth/logout", { method: "POST" });
     } catch {
       /* ignore */
     }
@@ -48,6 +56,13 @@ function formatCzk(v) {
 function formatPct(v) {
   if (v == null || Number.isNaN(v)) return "—";
   return `${Number(v).toFixed(1)} %`;
+}
+
+function formatDateShort(ts) {
+  if (ts == null || !Number.isFinite(Number(ts))) return "";
+  const d = new Date(Number(ts));
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("cs-CZ", { day: "numeric", month: "numeric", year: "numeric" });
 }
 function fmt(v, unit = "") {
   if (v == null || Number.isNaN(Number(v))) return "—";
@@ -71,8 +86,9 @@ function drawLine(canvas, series, pick, color, min = null, max = null) {
   ctx.fillStyle = cssVar("--surface", "#101218");
   ctx.fillRect(0, 0, w, h);
 
-  const vals = series.map(pick).filter((v) => v != null && !Number.isNaN(v));
-  if (vals.length < 2) {
+  const drawSeries = series.length === 1 ? [series[0], series[0]] : series;
+  const vals = drawSeries.map(pick).filter((v) => v != null && !Number.isNaN(v));
+  if (vals.length < 1) {
     ctx.fillStyle = cssVar("--muted", "#8b93a5");
     ctx.font = "14px DM Sans, sans-serif";
     ctx.fillText("Čekám na data…", 16, h / 2);
@@ -97,10 +113,10 @@ function drawLine(canvas, series, pick, color, min = null, max = null) {
   ctx.strokeStyle = color;
   ctx.lineWidth = 2;
   ctx.beginPath();
-  series.forEach((s, i) => {
+  drawSeries.forEach((s, i) => {
     const v = pick(s);
     if (v == null || Number.isNaN(v)) return;
-    const x = pad + (i * (w - 2 * pad)) / Math.max(1, series.length - 1);
+    const x = pad + (i * (w - 2 * pad)) / Math.max(1, drawSeries.length - 1);
     const y = pad + (h - 2 * pad) * (1 - (v - lo2) / (hi2 - lo2));
     if (i === 0) ctx.moveTo(x, y);
     else ctx.lineTo(x, y);
@@ -112,6 +128,308 @@ function drawCharts(series) {
   window.__lastSeries = series;
   drawLine($("powerChart"), series, (s) => s.solar_w, cssVar("--accent", "#3dff7a"), 0, null);
   drawLine($("socChart"), series, (s) => s.battery_soc_pct, "#60a5fa", 0, 100);
+}
+
+function drawBarChart(canvas, items, valueKey, labelKey, color) {
+  const ctx = canvas.getContext("2d");
+  const w = canvas.width;
+  const h = canvas.height;
+  const padL = 44;
+  const padR = 12;
+  const padT = 12;
+  const padB = 36;
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = cssVar("--surface", "#101218");
+  ctx.fillRect(0, 0, w, h);
+
+  const vals = items.map((it) => Number(it[valueKey])).map((v) => (Number.isFinite(v) ? v : 0));
+  if (!vals.length) {
+    ctx.fillStyle = cssVar("--muted", "#8b93a5");
+    ctx.font = "14px DM Sans, sans-serif";
+    ctx.fillText("Žádná data", padL, h / 2);
+    return;
+  }
+  const maxV = Math.max(...vals, 0.001);
+  const innerW = w - padL - padR;
+  const innerH = h - padT - padB;
+  const n = items.length;
+  const gap = 4;
+  const barW = Math.max(4, (innerW - gap * (n - 1)) / n);
+
+  ctx.strokeStyle = `${cssVar("--accent", "#3dff7a")}22`;
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const y = padT + (innerH * i) / 4;
+    ctx.beginPath();
+    ctx.moveTo(padL, y);
+    ctx.lineTo(w - padR, y);
+    ctx.stroke();
+  }
+
+  ctx.fillStyle = color || cssVar("--accent", "#3dff7a");
+  items.forEach((it, i) => {
+    const v = Number(it[valueKey]) || 0;
+    const bh = (v / maxV) * innerH;
+    const x = padL + i * (barW + gap);
+    const y = padT + innerH - bh;
+    ctx.fillRect(x, y, barW, bh);
+  });
+
+  ctx.fillStyle = cssVar("--muted", "#8b93a5");
+  ctx.font = "10px DM Sans, sans-serif";
+  ctx.textAlign = "center";
+  items.forEach((it, i) => {
+    const lab = String(it[labelKey] ?? "");
+    const short = lab.length > 10 ? lab.slice(5) : lab;
+    const x = padL + i * (barW + gap) + barW / 2;
+    ctx.save();
+    ctx.translate(x, h - padB + 8);
+    ctx.rotate(-0.35);
+    ctx.fillText(short, 0, 0);
+    ctx.restore();
+  });
+  ctx.textAlign = "left";
+
+  ctx.fillStyle = cssVar("--muted", "#8b93a5");
+  ctx.font = "11px DM Sans, sans-serif";
+  ctx.fillText(`max ${maxV.toFixed(1)} kWh`, padL, 14);
+}
+
+function renderBreakdownTable(container, items) {
+  if (!items.length) {
+    container.innerHTML = "<p class=\"stats-lead\">Žádná data.</p>";
+    return;
+  }
+  const rows = items
+    .map(
+      (it) => `<tr>
+      <td>${escapeHtml(it.label || it.key)}</td>
+      <td>${formatKwh(it.productionKwh)}</td>
+      <td>${formatKwh(it.consumptionKwh)}</td>
+      <td>${formatKwh(it.gridExportKwh)}</td>
+      <td>${formatKwh(it.gridImportKwh)}</td>
+      <td>${formatCzk(it.estimatedIncomeCzk)}</td>
+      <td>${it.samples ?? "—"}</td>
+    </tr>`
+    )
+    .join("");
+  container.innerHTML = `<table class="stats-data-table">
+    <thead><tr>
+      <th>Období</th><th>Výroba</th><th>Spotřeba</th><th>Export</th><th>Import</th><th>Příjem</th><th>Vzorky</th>
+    </tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+/** Ochrana před HTML odpovědí Apache místo JSON (JSON.parse na řádku 1). */
+async function parseJsonRes(res, label) {
+  const text = await res.text();
+  const t = String(text || "").trim();
+  if (!t) {
+    throw new Error(
+      `${label}: prázdná odpověď (HTTP ${res.status}). Spusťte Node API a případně nastavte localStorage homeapp_api_base na adresu API (např. http://127.0.0.1:3000).`
+    );
+  }
+  const first = t[0];
+  if (first !== "{" && first !== "[") {
+    throw new Error(
+      `${label}: server nevrátil JSON (HTTP ${res.status}). ${t.slice(0, 160)}${t.length > 160 ? "…" : ""}`
+    );
+  }
+  try {
+    return JSON.parse(t);
+  } catch (e) {
+    throw new Error(`${label}: ${e && e.message ? e.message : String(e)}`);
+  }
+}
+
+function fmtMatrixNum(v) {
+  if (v == null || Number.isNaN(Number(v))) return "";
+  return Number(v).toLocaleString("cs-CZ", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+}
+
+function fmtAvgNum(v) {
+  if (v == null || Number.isNaN(Number(v))) return "—";
+  return Number(v).toLocaleString("cs-CZ", { minimumFractionDigits: 2, maximumFractionDigits: 3 });
+}
+
+function renderMonthlyMatrixHtml(j) {
+  const rows = j.rows || [];
+  const monthNames = j.monthNames || [];
+  if (!rows.length) {
+    return "<p class=\"stats-lead\">Žádná uložená data — měsíční matice zatím nejsou k dispozici.</p>";
+  }
+
+  const headCols = ["", ...monthNames, "Celkem za rok"];
+  const headRow = `<tr>${headCols.map((h) => `<th>${escapeHtml(h)}</th>`).join("")}</tr>`;
+
+  function rowHtml(row, monthsKey, totalKey) {
+    const arr = row[monthsKey] || [];
+    const nums = monthNames.map((_, i) => fmtMatrixNum(arr[i]));
+    const total = row[totalKey];
+    return `<tr><td class="stats-matrix-year">${escapeHtml(String(row.year))}</td>${nums
+      .map((c) => `<td>${escapeHtml(c)}</td>`)
+      .join("")}<td>${escapeHtml(fmtMatrixNum(total))}</td></tr>`;
+  }
+
+  const prodTbody = rows.map((r) => rowHtml(r, "productionMonths", "totalProduction")).join("");
+  const gridImpTbody = rows.map((r) => rowHtml(r, "gridImportMonths", "totalGridImport")).join("");
+
+  const avgTbody = rows
+    .map(
+      (r) =>
+        `<tr><td>${escapeHtml(String(r.year))}</td><td>${escapeHtml(
+          fmtAvgNum(r.avgDailyProductionKwh)
+        )}</td><td>${escapeHtml(fmtAvgNum(r.avgDailyGridImportKwh))}</td></tr>`
+    )
+    .join("");
+
+  return `
+    <div class="stats-matrix-block">
+      <h3 class="stats-matrix-block-title">Měsíční výroba (kWh)</h3>
+      <div class="stats-table-wrap">
+        <table class="stats-matrix-table--excel">
+          <thead>${headRow}</thead>
+          <tbody>${prodTbody}</tbody>
+        </table>
+      </div>
+    </div>
+    <div class="stats-matrix-block">
+      <h3 class="stats-matrix-block-title">Měsíční odběr ze sítě (kWh)</h3>
+      <div class="stats-table-wrap">
+        <table class="stats-matrix-table--excel">
+          <thead>${headRow}</thead>
+          <tbody>${gridImpTbody}</tbody>
+        </table>
+      </div>
+    </div>
+    <div class="stats-matrix-block">
+      <h3 class="stats-matrix-block-title">Průměrná denní výroba a odběr ze sítě (kWh/den, děleno počtem dnů se vzorky)</h3>
+      <div class="stats-table-wrap">
+        <table class="stats-matrix-table--excel stats-matrix-table--avg">
+          <thead><tr><th>Rok</th><th>Průměrná denní výroba</th><th>Průměrný denní odběr ze sítě</th></tr></thead>
+          <tbody>${avgTbody}</tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+async function loadMonthlyMatrix() {
+  const r = await apiFetch("/api/stats/monthly-matrix");
+  const j = await parseJsonRes(r, "Měsíční matice");
+  if (!r.ok || j.ok === false) throw new Error(j.error || "monthly-matrix");
+  const wrap = $("matrixExcelWrap");
+  if (wrap) wrap.innerHTML = renderMonthlyMatrixHtml(j);
+}
+
+function ensureYearSelectsFallback() {
+  const yNow = new Date().getFullYear();
+  const ys = $("selectYearMonths");
+  const yd = $("selectYearDays");
+  const mSel = $("selectMonthDays");
+  if (ys && !ys.options.length) {
+    ys.innerHTML = `<option value="${yNow}">${yNow}</option>`;
+  }
+  if (yd && !yd.options.length) {
+    yd.innerHTML = `<option value="${yNow}">${yNow}</option>`;
+  }
+  if (mSel && !mSel.options.length) {
+    mSel.innerHTML = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+      .map((m) => `<option value="${m}">${m}.</option>`)
+      .join("");
+    mSel.value = String(new Date().getMonth() + 1);
+  }
+}
+
+async function loadSnapshot() {
+  const r = await apiFetch("/api/stats/snapshot");
+  const j = await parseJsonRes(r, "Snapshot");
+  if (!r.ok || j.ok === false) {
+    console.warn("snapshot:", j.error || r.status);
+    return;
+  }
+  const fill = (pre, b) => {
+    if (!b) return;
+    const g = (suffix) => $(`${pre}${suffix}`);
+    const p = g("Prod");
+    if (!p) return;
+    p.textContent = formatKwh(b.productionKwh);
+    g("Cons").textContent = formatKwh(b.consumptionKwh);
+    g("Income").textContent = formatCzk(b.estimatedIncomeCzk);
+    g("Samples").textContent = String(b.samples ?? "—");
+  };
+  fill("snapYear", j.year);
+  fill("snapAll", j.allTime);
+  fill("snapDay", j.day);
+  const sinceEl = $("snapAllSince");
+  if (sinceEl) {
+    const ft = j.allTime?.firstDataTs;
+    sinceEl.textContent =
+      ft != null && Number.isFinite(Number(ft))
+        ? `Data od ${formatDateShort(ft)} (součet od prvního vzorku)`
+        : "Žádná data v databázi.";
+  }
+}
+
+let cachedYearKeys = [];
+
+async function loadBreakdownYears() {
+  const r = await apiFetch("/api/stats/breakdown?granularity=years");
+  const j = await parseJsonRes(r, "Rozpad podle let");
+  if (!r.ok || j.ok === false) throw new Error(j.error || "breakdown years");
+  const items = j.items || [];
+  window.__lastBreakdownYears = items;
+  cachedYearKeys = items.map((it) => it.key);
+  renderBreakdownTable($("tableYearsWrap"), items);
+  drawBarChart($("barYears"), items, "productionKwh", "label", cssVar("--accent", "#3dff7a"));
+
+  const ySel = $("selectYearMonths");
+  const ySel2 = $("selectYearDays");
+  const yNow = new Date().getFullYear();
+  const opts = [yNow, ...cachedYearKeys.map(Number).filter((k) => k !== yNow)].sort((a, b) => b - a);
+  const uniq = [...new Set(opts.filter((n) => Number.isFinite(n)))];
+  ySel.innerHTML = uniq.map((y) => `<option value="${y}">${y}</option>`).join("");
+  ySel2.innerHTML = uniq.map((y) => `<option value="${y}">${y}</option>`).join("");
+  ySel.value = String(uniq.includes(yNow) ? yNow : uniq[0] ?? yNow);
+  ySel2.value = String(uniq.includes(yNow) ? yNow : uniq[0] ?? yNow);
+
+  const mSel = $("selectMonthDays");
+  mSel.innerHTML = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    .map((m) => `<option value="${m}">${m}.</option>`)
+    .join("");
+  mSel.value = String(new Date().getMonth() + 1);
+}
+
+async function loadBreakdownMonths() {
+  const year = Number($("selectYearMonths").value);
+  const r = await apiFetch(`/api/stats/breakdown?granularity=months&year=${encodeURIComponent(year)}`);
+  const j = await parseJsonRes(r, "Měsíce v roce");
+  if (!r.ok || j.ok === false) throw new Error(j.error || "breakdown months");
+  const items = j.items || [];
+  window.__lastBreakdownMonths = items;
+  renderBreakdownTable($("tableMonthsWrap"), items);
+  drawBarChart($("barMonths"), items, "productionKwh", "label", "#34d399");
+}
+
+async function loadBreakdownDays() {
+  const year = Number($("selectYearDays").value);
+  const month = Number($("selectMonthDays").value);
+  const r = await apiFetch(
+    `/api/stats/breakdown?granularity=days&year=${encodeURIComponent(year)}&month=${encodeURIComponent(month)}`
+  );
+  const j = await parseJsonRes(r, "Dny v měsíci");
+  if (!r.ok || j.ok === false) throw new Error(j.error || "breakdown days");
+  const items = j.items || [];
+  window.__lastBreakdownDays = items;
+  renderBreakdownTable($("tableDaysWrap"), items);
+  drawBarChart($("barDays"), items, "productionKwh", "label", "#60a5fa");
 }
 
 function drawRatioChart(selfPct, gridPct) {
@@ -166,8 +484,14 @@ function metricCard(title, items) {
 }
 
 async function loadDetailedMetrics() {
-  const r = await fetch("/api/live");
-  const j = await r.json();
+  let r;
+  let j;
+  try {
+    r = await apiFetch("/api/live");
+    j = await parseJsonRes(r, "Živá data");
+  } catch {
+    return;
+  }
   if (!r.ok || j.ok === false) return;
   const s = j.sensors || {};
   const grid = metricCard("Panely a síť", [
@@ -224,8 +548,8 @@ async function loadDetailedMetrics() {
 }
 
 async function loadStats() {
-  const r = await fetch(`/api/stats?range=${encodeURIComponent(currentRange)}`);
-  const j = await r.json();
+  const r = await apiFetch(`/api/stats?range=${encodeURIComponent(currentRange)}`);
+  const j = await parseJsonRes(r, "Statistiky");
   if (!r.ok || j.ok === false) throw new Error(j.error || "Nelze načíst statistiky");
   $("sProd").textContent = formatKwh(j.productionKwh);
   $("sCons").textContent = formatKwh(j.consumptionKwh);
@@ -238,11 +562,16 @@ async function loadStats() {
 }
 
 async function loadSeries() {
-  const r = await fetch(`/api/series-range?range=${encodeURIComponent(currentRange)}`);
-  const j = await r.json();
+  const r = await apiFetch(`/api/series-range?range=${encodeURIComponent(currentRange)}`);
+  const j = await parseJsonRes(r, "Časová řada");
   if (!r.ok || j.ok === false) throw new Error(j.error || "Nelze načíst graf");
   drawCharts(j.series || []);
-  $("statsInfo").textContent = `Rozsah: ${currentRange.toUpperCase()} · bucket ${(j.bucketMs / 60000).toFixed(0)} min`;
+  let bucketInfo = "";
+  if (j.bucketKind === "calendarMonth") bucketInfo = " · seskupení: kalendářní měsíc (i rozpracovaný)";
+  else if (j.bucketKind === "calendarYear") bucketInfo = " · seskupení: kalendářní rok (i rozpracovaný)";
+  else if (j.bucketMs != null && Number(j.bucketMs) > 0)
+    bucketInfo = ` · bucket ${(Number(j.bucketMs) / 60000).toFixed(0)} min`;
+  $("statsInfo").textContent = `Rozsah: ${currentRange.toUpperCase()}${bucketInfo}`;
 }
 
 function bindTabs() {
@@ -252,7 +581,7 @@ function bindTabs() {
       tabs.forEach((t) => t.classList.remove("active"));
       tab.classList.add("active");
       currentRange = tab.dataset.range || "day";
-      $("statsExportXls").href = `/api/export/xls?range=${encodeURIComponent(currentRange)}`;
+      $("statsExportXls").href = apiUrl(`/api/export/xls?range=${encodeURIComponent(currentRange)}`);
       await Promise.all([loadStats(), loadSeries()]);
     });
   });
@@ -262,8 +591,31 @@ function bindTabs() {
   initTheme();
   initLogout();
   bindTabs();
-  $("statsExportXls").href = `/api/export/xls?range=${encodeURIComponent(currentRange)}`;
+  $("statsExportXls").href = apiUrl(`/api/export/xls?range=${encodeURIComponent(currentRange)}`);
   await Promise.all([loadStats(), loadSeries()]);
+  try {
+    await loadSnapshot();
+  } catch (e) {
+    console.warn(e);
+  }
+  try {
+    await loadMonthlyMatrix();
+  } catch (e) {
+    console.warn(e);
+    const mw = $("matrixExcelWrap");
+    if (mw) mw.innerHTML = `<p class="stats-lead">${escapeHtml(String(e.message || e))}</p>`;
+  }
+  try {
+    await loadBreakdownYears();
+    await loadBreakdownMonths();
+    await loadBreakdownDays();
+  } catch (e) {
+    console.warn(e);
+    $("tableYearsWrap").innerHTML = `<p class="stats-lead">${escapeHtml(String(e.message || e))}</p>`;
+    ensureYearSelectsFallback();
+  }
+  $("btnLoadMonths")?.addEventListener("click", () => loadBreakdownMonths().catch(console.warn));
+  $("btnLoadDays")?.addEventListener("click", () => loadBreakdownDays().catch(console.warn));
   await loadDetailedMetrics();
   setInterval(loadDetailedMetrics, 15000);
 })();

@@ -60,6 +60,57 @@
           <span class="hint">Na Windows často <code>py</code>, jinde <code>python3</code>.</span>
         </div>
 
+        <div class="field field--checkbox">
+          <label class="checkbox-label">
+            <input type="checkbox" id="lanWebEnabled" name="lanWebEnabled" />
+            Vyčítat data z LAN webu (Playwright)
+          </label>
+          <span class="hint"
+            >Vyžaduje <code>py -m pip install playwright</code> a <code>py -m playwright install chromium</code>.
+            Přihlašovací údaje nastavte v <code>.env</code> na serveru: <code>LAN_WEB_USER</code>,
+            <code>LAN_WEB_PASSWORD</code>.</span
+          >
+        </div>
+
+        <div class="field">
+          <label for="lanWebBaseUrl">Základní URL zařízení (LAN web)</label>
+          <input
+            type="url"
+            id="lanWebBaseUrl"
+            name="lanWebBaseUrl"
+            autocomplete="off"
+            placeholder="http://192.168.5.54"
+          />
+          <span class="hint">Bez cesty za <code>#</code> — např. jen kořen webu.</span>
+        </div>
+
+        <div class="field">
+          <label for="lanWebLoginPath">Hash přihlášení</label>
+          <input type="text" id="lanWebLoginPath" name="lanWebLoginPath" autocomplete="off" placeholder="#/login" />
+          <span class="hint">Výchozí <code>#/login</code> odpovídá adrese <code>…/#/login</code>.</span>
+        </div>
+
+        <div class="field">
+          <label for="lanWebDataPath">Stránka s bojlerem (hash)</label>
+          <input type="text" id="lanWebDataPath" name="lanWebDataPath" autocomplete="off" placeholder="#/devices" />
+          <span class="hint">A-ZROUTER: karta Bojler na <code>#/devices</code> (teplota <code>9 / 85 °C</code>, stav <code>active</code>).</span>
+        </div>
+
+        <div class="field">
+          <label for="lanWebAltPath">Doplňková stránka (volitelné)</label>
+          <input
+            type="text"
+            id="lanWebAltPath"
+            name="lanWebAltPath"
+            autocomplete="off"
+            placeholder="např. #/ nebo prázdné"
+          />
+          <span class="hint"
+            >Po načtení zařízení se otevře i tato stránka a doplní chybějící údaje (např. teplota z přehledu). Nechte prázdné, pokud
+            stačí jen <code>#/devices</code>.</span
+          >
+        </div>
+
         <div class="form-actions">
           <button type="submit" class="btn btn-primary" id="btnSave">Uložit</button>
           <span class="form-status" id="formStatus" role="status" aria-live="polite"></span>
@@ -102,6 +153,7 @@
       </section>
     </div>
 
+    <script src="api-base.js"></script>
     <script src="settings.js"></script>
   </body>
 </html>

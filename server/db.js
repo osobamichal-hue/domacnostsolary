@@ -182,43 +182,119 @@ async function statsForRange(db, fromTs, toTs) {
   };
 }
 
-async function statsByPreset(db, preset, nowTs = Date.now()) {
-  const d = new Date(nowTs);
-  let fromTs = 0;
-  if (preset === "day") {
-    d.setHours(0, 0, 0, 0);
-    fromTs = d.getTime();
-  } else if (preset === "month") {
-    d.setDate(1);
-    d.setHours(0, 0, 0, 0);
-    fromTs = d.getTime();
-  } else if (preset === "year") {
-    d.setMonth(0, 1);
-    d.setHours(0, 0, 0, 0);
-    fromTs = d.getTime();
-  } else {
-    throw new Error(`Unknown preset ${preset}`);
+/** MySQL může vracet BIGINT jako string/BigInt — Date musí z ms čísla, ne z řetězce číslic. */
+function toMs(ts) {
+  if (ts == null) return NaN;
+  if (typeof ts === "bigint") return Number(ts);
+  const n = Number(ts);
+  return Number.isFinite(n) ? n : NaN;
+}
+
+/** Lokální kalendářní den (server TZ) — pro součty denních čítačů. */
+function dayKeyFromTs(ts) {
+  const ms = toMs(ts);
+  if (!Number.isFinite(ms)) return null;
+  const d = new Date(ms);
+  if (Number.isNaN(d.getTime())) return null;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+    d.getDate()
+  ).padStart(2, "0")}`;
+}
+
+function numOrNull(v) {
+  if (v == null) return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Denní / celkové energie bývají v normalized i v sensors (GoodWe různé názvy polí).
+ */
+function mergeNormalizedFromPayload(payload) {
+  const n0 = payload && payload.normalized && typeof payload.normalized === "object"
+    ? { ...payload.normalized }
+    : {};
+  const s = payload && payload.sensors && typeof payload.sensors === "object" ? payload.sensors : {};
+
+  function firstNum(keys) {
+    for (const k of keys) {
+      if (Object.prototype.hasOwnProperty.call(n0, k)) {
+        const v = numOrNull(n0[k]);
+        if (v != null) return v;
+      }
+    }
+    for (const k of keys) {
+      if (Object.prototype.hasOwnProperty.call(s, k)) {
+        const v = numOrNull(s[k]);
+        if (v != null) return v;
+      }
+    }
+    return null;
   }
 
-  const [rows] = await db.query(
-    "SELECT ts, payload FROM readings WHERE ok = 1 AND ts >= ? AND ts <= ? ORDER BY ts ASC",
-    [fromTs, nowTs]
-  );
+  const fill = (canonical, ...aliases) => {
+    const keys = [canonical, ...aliases];
+    if (numOrNull(n0[canonical]) != null) return;
+    const v = firstNum(keys);
+    if (v != null) n0[canonical] = v;
+  };
 
-  const parsed = rows
+  fill("e_day_kwh", "e_day");
+  fill("e_load_day_kwh", "e_load_day");
+  fill("e_day_export_kwh", "e_day_exp");
+  fill("e_day_import_kwh", "e_day_imp");
+  fill("e_total_kwh", "e_total");
+  fill("e_load_total_kwh", "e_load_total");
+  fill("e_total_export_kwh", "e_total_exp");
+  fill("e_total_import_kwh", "e_total_imp");
+
+  return n0;
+}
+
+/**
+ * Pro každý kalendářní den vezme maximum hodnoty (denní čítač roste během dne).
+ * Sečte přes dny v rozsahu – vhodné pro měsíc/rok i když chybí životní energie (e_total).
+ */
+function sumDailyMaxByField(parsed, fieldName) {
+  const byDay = new Map();
+  for (const row of parsed) {
+    const raw = row.n[fieldName];
+    if (raw == null || Number.isNaN(Number(raw))) continue;
+    const num = Number(raw);
+    const key = dayKeyFromTs(row.ts);
+    if (key == null) continue;
+    const prev = byDay.get(key);
+    if (prev == null || num > prev) byDay.set(key, num);
+  }
+  if (byDay.size === 0) return null;
+  let sum = 0;
+  for (const x of byDay.values()) sum += x;
+  return sum;
+}
+
+function parsePayloadRowsToParsed(rows) {
+  return rows
     .map((r) => {
       try {
         const p = JSON.parse(r.payload);
-        return { ts: r.ts, n: p.normalized || {} };
+        const ts = toMs(r.ts);
+        if (!Number.isFinite(ts)) return null;
+        const n = mergeNormalizedFromPayload(p);
+        return { ts, n };
       } catch {
         return null;
       }
     })
     .filter(Boolean);
+}
 
+/**
+ * @param {{ ts: number, n: object }[]} parsed — seřazeno podle ts
+ * @param {'day'|'month'|'year'} preset
+ */
+function computeEnergyStatsFromParsed(parsed, preset) {
   if (!parsed.length) {
     return {
-      range: preset,
       samples: 0,
       productionKwh: null,
       consumptionKwh: null,
@@ -277,6 +353,23 @@ async function statsByPreset(db, preset, nowTs = Date.now()) {
     );
   }
 
+  if (productionKwh == null || Number.isNaN(Number(productionKwh))) {
+    const s = sumDailyMaxByField(parsed, "e_day_kwh");
+    if (s != null) productionKwh = s;
+  }
+  if (consumptionKwh == null || Number.isNaN(Number(consumptionKwh))) {
+    const s = sumDailyMaxByField(parsed, "e_load_day_kwh");
+    if (s != null) consumptionKwh = s;
+  }
+  if (gridExportKwh == null || Number.isNaN(Number(gridExportKwh))) {
+    const s = sumDailyMaxByField(parsed, "e_day_export_kwh");
+    if (s != null) gridExportKwh = s;
+  }
+  if (gridImportKwh == null || Number.isNaN(Number(gridImportKwh))) {
+    const s = sumDailyMaxByField(parsed, "e_day_import_kwh");
+    if (s != null) gridImportKwh = s;
+  }
+
   let selfConsumptionKwh = null;
   if (productionKwh != null && gridExportKwh != null) {
     selfConsumptionKwh = Math.max(0, Number(productionKwh) - Number(gridExportKwh));
@@ -302,7 +395,6 @@ async function statsByPreset(db, preset, nowTs = Date.now()) {
   }
 
   return {
-    range: preset,
     samples: parsed.length,
     productionKwh,
     consumptionKwh,
@@ -311,6 +403,325 @@ async function statsByPreset(db, preset, nowTs = Date.now()) {
     selfConsumptionKwh,
     selfSufficiencyPct,
     gridDependencyPct,
+  };
+}
+
+async function statsByPreset(db, preset, nowTs = Date.now()) {
+  const d = new Date(nowTs);
+  let fromTs = 0;
+  if (preset === "day") {
+    d.setHours(0, 0, 0, 0);
+    fromTs = d.getTime();
+  } else if (preset === "month") {
+    d.setDate(1);
+    d.setHours(0, 0, 0, 0);
+    fromTs = d.getTime();
+  } else if (preset === "year") {
+    d.setMonth(0, 1);
+    d.setHours(0, 0, 0, 0);
+    fromTs = d.getTime();
+  } else {
+    throw new Error(`Unknown preset ${preset}`);
+  }
+
+  const [rows] = await db.query(
+    "SELECT ts, payload FROM readings WHERE ok = 1 AND ts >= ? AND ts <= ? ORDER BY ts ASC",
+    [fromTs, nowTs]
+  );
+
+  const parsed = parsePayloadRowsToParsed(rows);
+  if (!parsed.length) {
+    return {
+      range: preset,
+      samples: 0,
+      productionKwh: null,
+      consumptionKwh: null,
+      gridExportKwh: null,
+      gridImportKwh: null,
+      selfConsumptionKwh: null,
+      selfSufficiencyPct: null,
+      gridDependencyPct: null,
+    };
+  }
+
+  const stats = computeEnergyStatsFromParsed(parsed, preset);
+  return {
+    range: preset,
+    ...stats,
+  };
+}
+
+function monthKeyFromTs(ts) {
+  const ms = toMs(ts);
+  if (!Number.isFinite(ms)) return null;
+  const d = new Date(ms);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function yearKeyFromTs(ts) {
+  const ms = toMs(ts);
+  if (!Number.isFinite(ms)) return null;
+  return String(new Date(ms).getFullYear());
+}
+
+function groupParsedBy(parsed, keyFn) {
+  const m = new Map();
+  for (const row of parsed) {
+    const key = keyFn(row.ts);
+    if (key == null) continue;
+    if (!m.has(key)) m.set(key, []);
+    m.get(key).push(row);
+  }
+  for (const arr of m.values()) arr.sort((a, b) => a.ts - b.ts);
+  return m;
+}
+
+async function loadParsedOkReadings(db, fromTs, toTs, maxRows = 800000) {
+  const [rows] = await db.query(
+    "SELECT ts, payload FROM readings WHERE ok = 1 AND ts >= ? AND ts <= ? ORDER BY ts ASC LIMIT ?",
+    [fromTs, toTs, maxRows]
+  );
+  return parsePayloadRowsToParsed(rows);
+}
+
+/** Souhrn od nejstaršího platného vzorku do teď (stejná delta logika jako u „rok“). */
+async function statsAllTime(db, nowTs = Date.now()) {
+  const [boundRows] = await db.query(
+    "SELECT MIN(ts) AS mn, MAX(ts) AS mx FROM readings WHERE ok = 1"
+  );
+  const bounds = boundRows[0];
+  const minTs = bounds?.mn != null ? Number(bounds.mn) : null;
+  const maxTs = bounds?.mx != null ? Number(bounds.mx) : null;
+  const empty = {
+    samples: 0,
+    productionKwh: null,
+    consumptionKwh: null,
+    gridExportKwh: null,
+    gridImportKwh: null,
+    selfConsumptionKwh: null,
+    selfSufficiencyPct: null,
+    gridDependencyPct: null,
+    firstDataTs: null,
+    lastDataTs: null,
+  };
+  if (minTs == null || maxTs == null) {
+    return empty;
+  }
+  const toTs = Math.min(nowTs, maxTs);
+  const parsed = await loadParsedOkReadings(db, minTs, toTs);
+  if (!parsed.length) {
+    return { ...empty, firstDataTs: minTs, lastDataTs: maxTs };
+  }
+  const st = computeEnergyStatsFromParsed(parsed, "year");
+  return {
+    ...st,
+    firstDataTs: minTs,
+    lastDataTs: maxTs,
+  };
+}
+
+/** Rychlé přehledy: dnešek, aktuální měsíc, aktuální rok, celé období od prvních dat. */
+async function statsSnapshot(db, nowTs = Date.now()) {
+  const day = await statsByPreset(db, "day", nowTs);
+  const month = await statsByPreset(db, "month", nowTs);
+  const year = await statsByPreset(db, "year", nowTs);
+  const allTime = await statsAllTime(db, nowTs);
+  return { day, month, year, allTime, nowTs };
+}
+
+/**
+ * Rozpad podle kalendáře.
+ * @param {'years'|'months'|'days'} granularity
+ * @param {number} [year] pro months/days
+ * @param {number} [month] 1–12 pro days
+ */
+async function statsBreakdown(db, granularity, year, month, nowTs = Date.now()) {
+  const [boundRows] = await db.query(
+    "SELECT MIN(ts) AS mn, MAX(ts) AS mx FROM readings WHERE ok = 1"
+  );
+  const bounds = boundRows[0];
+  const minTs = bounds?.mn != null ? Number(bounds.mn) : null;
+  const maxTs = bounds?.mx != null ? Number(bounds.mx) : null;
+  if (minTs == null || maxTs == null) {
+    return { granularity, items: [], bounds: null };
+  }
+
+  const toTs = Math.min(nowTs, maxTs);
+
+  if (granularity === "years") {
+    const parsed = await loadParsedOkReadings(db, minTs, toTs);
+    const byYear = groupParsedBy(parsed, yearKeyFromTs);
+    const keys = [...byYear.keys()].sort((a, b) => Number(b) - Number(a));
+    const items = keys.map((key) => {
+      const st = computeEnergyStatsFromParsed(byYear.get(key), "year");
+      return {
+        key,
+        label: key,
+        fromTs: byYear.get(key)[0].ts,
+        toTs: byYear.get(key)[byYear.get(key).length - 1].ts,
+        ...st,
+      };
+    });
+    return { granularity, items, bounds: { minTs, maxTs } };
+  }
+
+  if (granularity === "months") {
+    const y = Number(year);
+    if (!Number.isFinite(y)) throw new Error("Chybí platný year");
+    const from = new Date(y, 0, 1, 0, 0, 0, 0).getTime();
+    const to = Math.min(new Date(y, 11, 31, 23, 59, 59, 999).getTime(), toTs);
+    const parsed = await loadParsedOkReadings(db, from, to);
+    const byMonth = groupParsedBy(parsed, monthKeyFromTs);
+    const keys = [...byMonth.keys()].sort();
+    const monthNames = [
+      "Leden",
+      "Únor",
+      "Březen",
+      "Duben",
+      "Květen",
+      "Červen",
+      "Červenec",
+      "Srpen",
+      "Září",
+      "Říjen",
+      "Listopad",
+      "Prosinec",
+    ];
+    const items = keys.map((key) => {
+      const arr = byMonth.get(key);
+      const st = computeEnergyStatsFromParsed(arr, "month");
+      const [, mm] = key.split("-");
+      const mi = Number(mm) - 1;
+      return {
+        key,
+        label: `${monthNames[mi] || key} ${y}`,
+        fromTs: arr[0].ts,
+        toTs: arr[arr.length - 1].ts,
+        ...st,
+      };
+    });
+    return { granularity, year: y, items, bounds: { minTs, maxTs } };
+  }
+
+  if (granularity === "days") {
+    const y = Number(year);
+    const m = Number(month);
+    if (!Number.isFinite(y) || !Number.isFinite(m) || m < 1 || m > 12) {
+      throw new Error("Chybí platný year a month (1–12)");
+    }
+    const from = new Date(y, m - 1, 1, 0, 0, 0, 0).getTime();
+    const lastDay = new Date(y, m, 0, 23, 59, 59, 999).getTime();
+    const to = Math.min(lastDay, toTs);
+    const parsed = await loadParsedOkReadings(db, from, to);
+    const byDay = groupParsedBy(parsed, dayKeyFromTs);
+    const keys = [...byDay.keys()].sort();
+    const items = keys.map((key) => {
+      const arr = byDay.get(key);
+      const st = computeEnergyStatsFromParsed(arr, "day");
+      return {
+        key,
+        label: key,
+        fromTs: arr[0].ts,
+        toTs: arr[arr.length - 1].ts,
+        ...st,
+      };
+    });
+    return { granularity, year: y, month: m, items, bounds: { minTs, maxTs } };
+  }
+
+  throw new Error("Neplatná granularita");
+}
+
+const MONTH_NAMES_CS = [
+  "Leden",
+  "Únor",
+  "Březen",
+  "Duben",
+  "Květen",
+  "Červen",
+  "Červenec",
+  "Srpen",
+  "Září",
+  "Říjen",
+  "Listopad",
+  "Prosinec",
+];
+
+function sumNullableNumbers(arr) {
+  let s = 0;
+  for (const x of arr) {
+    if (x != null && !Number.isNaN(Number(x))) s += Number(x);
+  }
+  return s;
+}
+
+/**
+ * Měsíční matice po letech (jako list „Statistiky“ v Excelu): řádky = roky, sloupce = měsíce + celkem.
+ */
+async function statsMonthlyMatrix(db, nowTs = Date.now()) {
+  const [boundRows] = await db.query(
+    "SELECT MIN(ts) AS mn, MAX(ts) AS mx FROM readings WHERE ok = 1"
+  );
+  const minTs = boundRows[0]?.mn != null ? Number(boundRows[0].mn) : null;
+  const maxTs = boundRows[0]?.mx != null ? Number(boundRows[0].mx) : null;
+  if (minTs == null || maxTs == null) {
+    return { monthNames: MONTH_NAMES_CS, rows: [], bounds: null };
+  }
+
+  const toTs = Math.min(nowTs, maxTs);
+  const yMin = new Date(minTs).getFullYear();
+  const yMax = new Date(toTs).getFullYear();
+  const rows = [];
+
+  for (let y = yMin; y <= yMax; y++) {
+    const from = new Date(y, 0, 1, 0, 0, 0, 0).getTime();
+    const to = Math.min(new Date(y, 11, 31, 23, 59, 59, 999).getTime(), toTs);
+    const parsed = await loadParsedOkReadings(db, from, to);
+    const byMonth = groupParsedBy(parsed, monthKeyFromTs);
+    const productionMonths = Array(12).fill(null);
+    const consumptionMonths = Array(12).fill(null);
+    const gridExportMonths = Array(12).fill(null);
+    const gridImportMonths = Array(12).fill(null);
+
+    for (let m = 1; m <= 12; m++) {
+      const key = `${y}-${String(m).padStart(2, "0")}`;
+      const arr = byMonth.get(key);
+      if (!arr || !arr.length) continue;
+      const st = computeEnergyStatsFromParsed(arr, "month");
+      productionMonths[m - 1] = st.productionKwh;
+      consumptionMonths[m - 1] = st.consumptionKwh;
+      gridExportMonths[m - 1] = st.gridExportKwh;
+      gridImportMonths[m - 1] = st.gridImportKwh;
+    }
+
+    const byDay = groupParsedBy(parsed, dayKeyFromTs);
+    const uniqueDays = byDay.size;
+
+    const totalProduction = sumNullableNumbers(productionMonths);
+    const totalConsumption = sumNullableNumbers(consumptionMonths);
+    const totalGridExport = sumNullableNumbers(gridExportMonths);
+    const totalGridImport = sumNullableNumbers(gridImportMonths);
+
+    rows.push({
+      year: y,
+      productionMonths,
+      consumptionMonths,
+      gridExportMonths,
+      gridImportMonths,
+      totalProduction,
+      totalConsumption,
+      totalGridExport,
+      totalGridImport,
+      uniqueDaysInYear: uniqueDays,
+      avgDailyProductionKwh: uniqueDays > 0 ? totalProduction / uniqueDays : null,
+      avgDailyGridImportKwh: uniqueDays > 0 ? totalGridImport / uniqueDays : null,
+    });
+  }
+
+  return {
+    monthNames: MONTH_NAMES_CS,
+    rows,
+    bounds: { minTs, maxTs },
   };
 }
 
@@ -418,6 +829,9 @@ module.exports = {
   recentSeries,
   statsForRange,
   statsByPreset,
+  statsSnapshot,
+  statsBreakdown,
+  statsMonthlyMatrix,
   rowsForRange,
   createUser,
   getUserByUsername,

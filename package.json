@@ -8,7 +8,9 @@
   },
   "scripts": {
     "start": "node server/index.js",
-    "dev": "node server/index.js"
+    "dev": "node server/index.js",
+    "import:ha": "node scripts/import_homeassistant_readings.js",
+    "import:ha:dry": "node scripts/import_homeassistant_readings.js --dry-run"
   },
   "dependencies": {
     "better-sqlite3": "^11.7.0",

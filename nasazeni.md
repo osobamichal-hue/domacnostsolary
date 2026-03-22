@@ -1,5 +1,7 @@
 # Plán nasazení pomocí Git na Raspberry Pi (Ubuntu) po migraci na MySQL
 
+Obecný popis aplikace HomeAPP (spuštění, API, konfigurace): viz **[README.md](README.md)** v kořeni projektu.
+
 ## Cíl
 
 Cílem je mít jednoduchý a opakovatelný proces:

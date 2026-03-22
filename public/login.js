@@ -1,3 +1,15 @@
+/* global apiFetch, apiUrl */
+(function ensureApiHelpers() {
+  if (typeof window.apiFetch === "function") return;
+  window.apiUrl = function (path) {
+    const p = path.startsWith("/") ? path : `/${path}`;
+    return p;
+  };
+  window.apiFetch = function (path, init) {
+    return fetch(window.apiUrl(path), { credentials: "same-origin", ...init });
+  };
+})();
+
 const $ = (id) => document.getElementById(id);
 
 function setStatus(text, ok = false) {
@@ -19,20 +31,32 @@ async function submitAuth(ev) {
   }
 
   try {
-    const r = await fetch("/api/auth/login", {
+    const r = await apiFetch("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, password }),
     });
-    const j = await r.json();
+    const text = await r.text();
+    let j;
+    try {
+      j = JSON.parse(text);
+    } catch {
+      setStatus(
+        `Server nevrátil JSON (HTTP ${r.status}). ${String(text).trim().slice(0, 120)}`
+      );
+      return;
+    }
     if (!r.ok || j.ok === false) {
       setStatus(j.error || "Operace se nezdařila.");
       return;
     }
     setStatus("Přihlášení proběhlo.", true);
-    window.location.href = "/";
-  } catch {
-    setStatus("Chyba spojení se serverem.");
+    const base = window.__homeappApiBase;
+    window.location.href = base ? `${String(base).replace(/\/$/, "")}/` : "/";
+  } catch (e) {
+    setStatus(
+      `Nelze kontaktovat API (${e && e.message ? e.message : "síť"}). Je spuštěný Node server (npm start)?`
+    );
   }
 }
 

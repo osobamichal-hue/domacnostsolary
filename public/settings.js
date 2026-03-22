@@ -1,3 +1,4 @@
+/* global apiFetch */
 const $ = (id) => document.getElementById(id);
 const THEME_KEY = "homeapp_theme";
 
@@ -22,7 +23,7 @@ function initTheme() {
 function initLogout() {
   $("logoutBtn")?.addEventListener("click", async () => {
     try {
-      await fetch("/api/auth/logout", { method: "POST" });
+      await apiFetch("/api/auth/logout", { method: "POST" });
     } catch {
       /* ignore */
     }
@@ -51,13 +52,18 @@ function showStatus(el, text, ok) {
 }
 
 async function loadConfig() {
-  const r = await fetch("/api/config");
+  const r = await apiFetch("/api/config");
   const j = await parseApiResponse(r);
   if (!j.ok) throw new Error(j.error || "Nelze načíst konfiguraci");
   $("goodweHost").value = j.goodweHost || "";
   $("pollIntervalSec").value = String(Math.round((j.pollIntervalMs || 10000) / 1000));
   $("feedInCzkPerKwh").value = String(j.feedInCzkPerKwh ?? j.feedInEurPerKwh ?? 5.5);
   $("pythonExe").value = j.pythonExe || "python";
+  $("lanWebEnabled").checked = Boolean(j.lanWebEnabled);
+  $("lanWebBaseUrl").value = j.lanWebBaseUrl || "";
+  $("lanWebLoginPath").value = j.lanWebLoginPath || "#/login";
+  $("lanWebDataPath").value = j.lanWebDataPath || "#/devices";
+  $("lanWebAltPath").value = j.lanWebAltPath || "";
 }
 
 $("cfgForm").addEventListener("submit", async (e) => {
@@ -73,10 +79,15 @@ $("cfgForm").addEventListener("submit", async (e) => {
     pollIntervalMs: Math.round(pollSec * 1000),
     feedInCzkPerKwh: Number($("feedInCzkPerKwh").value),
     pythonExe: $("pythonExe").value.trim(),
+    lanWebEnabled: $("lanWebEnabled").checked,
+    lanWebBaseUrl: $("lanWebBaseUrl").value.trim(),
+    lanWebLoginPath: $("lanWebLoginPath").value.trim() || "#/login",
+    lanWebDataPath: $("lanWebDataPath").value.trim() || "#/devices",
+    lanWebAltPath: $("lanWebAltPath").value.trim(),
   };
 
   try {
-    const r = await fetch("/api/config", {
+    const r = await apiFetch("/api/config", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -105,7 +116,7 @@ $("userForm")?.addEventListener("submit", async (e) => {
   const password = String($("newPassword").value || "");
 
   try {
-    const r = await fetch("/api/auth/register", {
+    const r = await apiFetch("/api/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, password }),

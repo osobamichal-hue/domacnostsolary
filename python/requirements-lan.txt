@@ -1,0 +1,2 @@
+# Volitelné: vyčítání LAN webu (Playwright). GoodWe skript tento soubor nepotřebuje.
+playwright>=1.40.0

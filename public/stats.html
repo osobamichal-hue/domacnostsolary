@@ -29,9 +29,48 @@
         </div>
       </header>
 
-      <section class="summary-card" aria-label="Souhrn statistik">
+      <section class="summary-card" aria-label="Rychlé přehledy">
         <div class="summary-head">
           <h1 class="section-title">Statistiky</h1>
+        </div>
+        <p class="stats-lead">
+          Výchozí přehled: <strong>aktuální kalendářní rok</strong>, <strong>celé období od prvního uloženého vzorku</strong> a dnešek. Níže kalendářní rozpad rok → měsíce → dny.
+        </p>
+        <div class="stats-snapshot-grid" id="snapshotGrid">
+          <div class="stats-snapshot-card">
+            <h2 class="stats-snapshot-title">Aktuální rok</h2>
+            <div class="stats-snapshot-kpis">
+              <div><span class="kpi-label">Výroba</span><span class="kpi-value" id="snapYearProd">—</span></div>
+              <div><span class="kpi-label">Spotřeba</span><span class="kpi-value" id="snapYearCons">—</span></div>
+              <div><span class="kpi-label">Příjem</span><span class="kpi-value" id="snapYearIncome">—</span></div>
+              <div><span class="kpi-label">Vzorky</span><span class="kpi-value" id="snapYearSamples">—</span></div>
+            </div>
+          </div>
+          <div class="stats-snapshot-card">
+            <h2 class="stats-snapshot-title">Celé období</h2>
+            <p class="stats-snapshot-sub" id="snapAllSince">—</p>
+            <div class="stats-snapshot-kpis">
+              <div><span class="kpi-label">Výroba</span><span class="kpi-value" id="snapAllProd">—</span></div>
+              <div><span class="kpi-label">Spotřeba</span><span class="kpi-value" id="snapAllCons">—</span></div>
+              <div><span class="kpi-label">Příjem</span><span class="kpi-value" id="snapAllIncome">—</span></div>
+              <div><span class="kpi-label">Vzorky</span><span class="kpi-value" id="snapAllSamples">—</span></div>
+            </div>
+          </div>
+          <div class="stats-snapshot-card">
+            <h2 class="stats-snapshot-title">Dnes</h2>
+            <div class="stats-snapshot-kpis">
+              <div><span class="kpi-label">Výroba</span><span class="kpi-value" id="snapDayProd">—</span></div>
+              <div><span class="kpi-label">Spotřeba</span><span class="kpi-value" id="snapDayCons">—</span></div>
+              <div><span class="kpi-label">Příjem</span><span class="kpi-value" id="snapDayIncome">—</span></div>
+              <div><span class="kpi-label">Vzorky</span><span class="kpi-value" id="snapDaySamples">—</span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="summary-card" aria-label="Souhrn podle záložky">
+        <div class="summary-head">
+          <h2 class="section-title section-title--sub">Vybraný rozsah (grafy)</h2>
           <div class="range-tabs">
             <button type="button" class="tab active" data-range="day">Den</button>
             <button type="button" class="tab" data-range="month">Měsíc</button>
@@ -49,6 +88,49 @@
         </div>
       </section>
 
+      <section class="summary-card stats-excel-section" aria-label="Měsíční matice">
+        <h2 class="section-title section-title--sub">Měsíční přehled (jako v Excelu)</h2>
+        <p class="stats-lead">
+          Řádky = kalendářní roky, sloupce = měsíce a součet za rok. Odběr ze sítě odpovídá sloupci „Spotřeba z distribuce“ ve vašem sešitu.
+        </p>
+        <div id="matrixExcelWrap" class="stats-matrix-excel-wrap"></div>
+      </section>
+
+      <section class="stats-detail-block" aria-label="Podrobné statistiky">
+        <h2 class="section-title">Podrobné statistiky</h2>
+        <p class="stats-lead">Kalendářní řady podle roku, měsíce a dne — tabulky a sloupcové grafy výroby (kWh).</p>
+
+        <div class="stats-detail-panel">
+          <h3 class="stats-detail-heading">Podle roku</h3>
+          <canvas id="barYears" width="900" height="220" class="stats-bar-canvas"></canvas>
+          <div class="stats-table-wrap" id="tableYearsWrap"></div>
+        </div>
+
+        <div class="stats-detail-panel">
+          <h3 class="stats-detail-heading">Měsíce v roce</h3>
+          <div class="stats-detail-controls">
+            <label class="stats-select-label">Rok</label>
+            <select id="selectYearMonths" class="stats-select"></select>
+            <button type="button" class="stats-btn" id="btnLoadMonths">Načíst měsíce</button>
+          </div>
+          <canvas id="barMonths" width="900" height="220" class="stats-bar-canvas"></canvas>
+          <div class="stats-table-wrap" id="tableMonthsWrap"></div>
+        </div>
+
+        <div class="stats-detail-panel">
+          <h3 class="stats-detail-heading">Dny v měsíci</h3>
+          <div class="stats-detail-controls">
+            <label class="stats-select-label">Rok</label>
+            <select id="selectYearDays" class="stats-select"></select>
+            <label class="stats-select-label">Měsíc</label>
+            <select id="selectMonthDays" class="stats-select"></select>
+            <button type="button" class="stats-btn" id="btnLoadDays">Načíst dny</button>
+          </div>
+          <canvas id="barDays" width="900" height="260" class="stats-bar-canvas"></canvas>
+          <div class="stats-table-wrap" id="tableDaysWrap"></div>
+        </div>
+      </section>
+
       <section class="chart-section">
         <h2 class="section-title">Poměr spotřeby: vlastní vs. síť</h2>
         <canvas id="ratioChart" width="900" height="180"></canvas>
@@ -57,7 +139,7 @@
       <section class="chart-section">
         <div class="section-row">
           <h2 class="section-title">Průměrný výkon v čase</h2>
-          <a id="statsExportXls" class="export-link" href="/api/export/xls?range=day">Export XLS</a>
+          <a id="statsExportXls" class="export-link" href="#">Export XLS</a>
         </div>
         <canvas id="powerChart" width="900" height="260"></canvas>
       </section>
@@ -75,6 +157,7 @@
       <div class="model-line" id="statsInfo"></div>
     </div>
 
+    <script src="api-base.js"></script>
     <script src="stats.js"></script>
   </body>
 </html>

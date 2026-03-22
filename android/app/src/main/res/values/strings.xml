@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">HomeAPP</string>
+    <string name="setup_title">Připojení k serveru</string>
+    <string name="setup_internal_host">Domácí síť — hostitel nebo IP</string>
+    <string name="setup_internal_port">Port (domácí)</string>
+    <string name="setup_public_host">Internet — hostitel nebo IP</string>
+    <string name="setup_public_port">Port (internet)</string>
+    <string name="setup_prefer_internal">Nejdřív zkusit domácí adresu</string>
+    <string name="setup_username">Uživatelské jméno</string>
+    <string name="setup_password">Heslo</string>
+    <string name="setup_save_remember">Uložit a přihlašovat automaticky</string>
+    <string name="setup_save">Uložit</string>
+    <string name="setup_cancel">Zrušit</string>
+    <string name="menu_server_settings">Nastavení serveru</string>
+    <string name="menu_reload">Obnovit stránku</string>
+    <string name="error_need_server">Vyplňte alespoň jednu adresu (domácí nebo internet).</string>
+</resources>

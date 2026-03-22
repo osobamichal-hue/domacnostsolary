@@ -6,6 +6,13 @@ const path = require("path");
 const FILENAME = "app-config.json";
 
 function defaultsFromEnv() {
+  const lanEnabled =
+    String(process.env.LAN_WEB_ENABLED || "")
+      .trim()
+      .toLowerCase() === "1" ||
+    String(process.env.LAN_WEB_ENABLED || "")
+      .trim()
+      .toLowerCase() === "true";
   return {
     goodweHost: String(process.env.GOODWE_HOST || "").trim(),
     pollIntervalMs: Math.max(
@@ -16,6 +23,11 @@ function defaultsFromEnv() {
       process.env.FEED_IN_CZK_PER_KWH || process.env.FEED_IN_EUR_PER_KWH || 5.5
     ),
     pythonExe: String(process.env.PYTHON_EXE || "python").trim(),
+    lanWebEnabled: lanEnabled,
+    lanWebBaseUrl: String(process.env.LAN_WEB_BASE_URL || "").trim(),
+    lanWebLoginPath: String(process.env.LAN_WEB_LOGIN_PATH || "#/login").trim(),
+    lanWebDataPath: String(process.env.LAN_WEB_DATA_PATH || "#/devices").trim(),
+    lanWebAltPath: String(process.env.LAN_WEB_ALT_PATH || "").trim(),
   };
 }
 
@@ -42,6 +54,21 @@ function merge(base, file) {
   }
   if (file.pythonExe !== undefined) {
     out.pythonExe = String(file.pythonExe).trim();
+  }
+  if (file.lanWebEnabled !== undefined) {
+    out.lanWebEnabled = Boolean(file.lanWebEnabled);
+  }
+  if (file.lanWebBaseUrl !== undefined) {
+    out.lanWebBaseUrl = String(file.lanWebBaseUrl).trim();
+  }
+  if (file.lanWebLoginPath !== undefined) {
+    out.lanWebLoginPath = String(file.lanWebLoginPath).trim();
+  }
+  if (file.lanWebDataPath !== undefined) {
+    out.lanWebDataPath = String(file.lanWebDataPath).trim();
+  }
+  if (file.lanWebAltPath !== undefined) {
+    out.lanWebAltPath = String(file.lanWebAltPath).trim();
   }
   return out;
 }
@@ -79,6 +106,28 @@ function validatePatch(patch) {
     if (!py.length) err.push("Zadejte příkaz pro Python (např. py nebo python).");
     if (py.length > 512) err.push("Příkaz Python je příliš dlouhý.");
   }
+  if (patch.lanWebBaseUrl !== undefined) {
+    const u = String(patch.lanWebBaseUrl).trim();
+    if (u.length > 2048) err.push("URL LAN webu je příliš dlouhá.");
+    if (u.length > 0) {
+      const low = u.toLowerCase();
+      if (!low.startsWith("http://") && !low.startsWith("https://")) {
+        err.push("Základní URL musí začínat http:// nebo https://.");
+      }
+    }
+  }
+  if (patch.lanWebLoginPath !== undefined) {
+    const p = String(patch.lanWebLoginPath).trim();
+    if (p.length > 512) err.push("Cesta přihlášení je příliš dlouhá.");
+  }
+  if (patch.lanWebDataPath !== undefined) {
+    const p = String(patch.lanWebDataPath).trim();
+    if (p.length > 512) err.push("Cesta stránky s daty (hash) je příliš dlouhá.");
+  }
+  if (patch.lanWebAltPath !== undefined) {
+    const p = String(patch.lanWebAltPath).trim();
+    if (p.length > 512) err.push("Doplňková hash cesta je příliš dlouhá.");
+  }
   return err;
 }
 
@@ -99,6 +148,11 @@ function createConfigStore(dataDir) {
           pollIntervalMs: data.pollIntervalMs,
           feedInCzkPerKwh: data.feedInCzkPerKwh,
           pythonExe: data.pythonExe,
+          lanWebEnabled: data.lanWebEnabled,
+          lanWebBaseUrl: data.lanWebBaseUrl,
+          lanWebLoginPath: data.lanWebLoginPath,
+          lanWebDataPath: data.lanWebDataPath,
+          lanWebAltPath: data.lanWebAltPath,
         },
         null,
         2
@@ -113,6 +167,11 @@ function createConfigStore(dataDir) {
       pollIntervalMs: data.pollIntervalMs,
       feedInCzkPerKwh: data.feedInCzkPerKwh,
       pythonExe: data.pythonExe,
+      lanWebEnabled: Boolean(data.lanWebEnabled),
+      lanWebBaseUrl: data.lanWebBaseUrl || "",
+      lanWebLoginPath: data.lanWebLoginPath || "#/login",
+      lanWebDataPath: data.lanWebDataPath || "#/devices",
+      lanWebAltPath: data.lanWebAltPath || "",
     };
   }
 
@@ -135,6 +194,26 @@ function createConfigStore(dataDir) {
     }
     if (patch.pythonExe !== undefined) {
       next.pythonExe = String(patch.pythonExe).trim();
+    }
+    if (patch.lanWebEnabled !== undefined) {
+      next.lanWebEnabled = Boolean(patch.lanWebEnabled);
+    }
+    if (patch.lanWebBaseUrl !== undefined) {
+      next.lanWebBaseUrl = String(patch.lanWebBaseUrl).trim();
+    }
+    if (patch.lanWebLoginPath !== undefined) {
+      next.lanWebLoginPath = String(patch.lanWebLoginPath).trim() || "#/login";
+    }
+    if (patch.lanWebDataPath !== undefined) {
+      next.lanWebDataPath = String(patch.lanWebDataPath).trim() || "#/devices";
+    }
+    if (patch.lanWebAltPath !== undefined) {
+      next.lanWebAltPath = String(patch.lanWebAltPath).trim();
+    }
+    if (next.lanWebEnabled && !String(next.lanWebBaseUrl || "").trim()) {
+      const e = new Error("Při zapnutém LAN webu zadejte základní URL (http://…).");
+      e.code = "VALIDATION";
+      throw e;
     }
     data = next;
     persist();
