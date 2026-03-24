@@ -117,7 +117,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-V `.env` nastav např. `PYTHON_EXE=/home/deploy/apps/homeapp/.venv/bin/python`, aby služba používala stejný interpreter.
+V `.env` nastav např. `PYTHON_EXE=/home/administrator/nodeapp/.venv/bin/python`, aby služba používala stejný interpreter.
 
 Volitelně **LAN web** (Playwright): `pip install -r python/requirements-lan.txt` a podle dokumentace Playwright i `playwright install` (chromium). Vyžaduje proměnné `LAN_WEB_USER`, `LAN_WEB_PASSWORD` a případně další z [`.env.example`](.env.example).
 
@@ -126,18 +126,18 @@ Volitelně **LAN web** (Playwright): `pip install -r python/requirements-lan.txt
 Nejdřív jednorázově v adresáři projektu:
 
 ```bash
-cd ~/apps/homeapp
+cd ~/nodeapp
 npm ci --omit=dev
 ```
 
 Vytvoř službu `/etc/systemd/system/homeapp.service` s minimálně těmito položkami:
 
-- `User=deploy`
-- `WorkingDirectory=/home/deploy/apps/homeapp`
-- `ExecStart=/usr/bin/node /home/deploy/apps/homeapp/server/index.js`  
+- `User=administrator`
+- `WorkingDirectory=/home/administrator/nodeapp`
+- `ExecStart=/usr/bin/node /home/administrator/nodeapp/server/index.js`  
   (cestu k `node` ověř příkazem `which node`; alternativně `ExecStart=/usr/bin/npm start` s `PATH` vhodně nastaveným přes `Environment=`)
 - `Restart=always`
-- `EnvironmentFile=-/home/deploy/apps/homeapp/.env.production`  
+- `EnvironmentFile=-/home/administrator/nodeapp/.env.production`  
   (případně `.env`; pomlčka znamená, že chybějící soubor nezhodí službu)
 
 Aktivace služby:
@@ -195,6 +195,22 @@ Vytvoř `deploy.sh`, který provede kroky:
 3. volitelná záloha MySQL,
 4. restart služby,
 5. kontrolu logů (`journalctl`).
+
+V repozitáři je připravený skript `scripts/deploy.sh`, který řeší kompletní nasazení HomeAPP včetně:
+- Node + Python závislostí,
+- vytvoření `.env.production` z exportovaných proměnných (včetně hesel),
+- vytvoření/aktualizace `systemd` služby a restartu.
+- Je připravený pro Ubuntu na Raspberry Pi (ARM); hlídá Node >= 20.
+
+Příklad spuštění:
+
+```bash
+cd ~/nodeapp
+export REPO_URL="https://github.com/osobamichal-hue/domacnostsolary.git"
+export GOODWE_HOST="192.168.1.14"
+export DB_PASSWORD="silne_heslo"
+bash scripts/deploy.sh
+```
 
 ## 10) Rollback plán
 

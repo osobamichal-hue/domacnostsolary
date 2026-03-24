@@ -6,20 +6,53 @@ const $ = (id) => document.getElementById(id);
  */
 const BATTERY_GOODWE_SIGN = true;
 const THEME_KEY = "homeapp_theme";
-const LAYOUT_KEY = "homeapp_live_layout_v1";
+const LAYOUT_KEY = "homeapp_live_layout_shared_v2";
+const LEGACY_LAYOUT_KEYS = [
+  "homeapp_live_layout_v1",
+  "homeapp_live_layout_v1_dark",
+  "homeapp_live_layout_v1_light",
+];
 let lastBatterySoc = null;
 let lastBatteryModeLabel = null;
 
-function readLayout() {
+function sanitizeLayoutMap(raw) {
+  if (!raw || typeof raw !== "object") return {};
+  const out = {};
+  for (const [key, val] of Object.entries(raw)) {
+    if (!val || typeof val !== "object") continue;
+    const left = Number(val.left);
+    const top = Number(val.top);
+    if (!Number.isFinite(left) || !Number.isFinite(top)) continue;
+    out[key] = { left, top };
+  }
+  return out;
+}
+
+function readLayoutRaw(key) {
   try {
-    return JSON.parse(localStorage.getItem(LAYOUT_KEY) || "{}");
+    return sanitizeLayoutMap(JSON.parse(localStorage.getItem(key) || "{}"));
   } catch {
     return {};
   }
 }
 
 function writeLayout(next) {
-  localStorage.setItem(LAYOUT_KEY, JSON.stringify(next));
+  localStorage.setItem(LAYOUT_KEY, JSON.stringify(sanitizeLayoutMap(next)));
+}
+
+function migrateLayoutIfNeeded() {
+  if (localStorage.getItem(LAYOUT_KEY) != null) return;
+  let merged = {};
+  for (const key of LEGACY_LAYOUT_KEYS) {
+    const oldMap = readLayoutRaw(key);
+    if (Object.keys(oldMap).length) merged = { ...merged, ...oldMap };
+  }
+  if (Object.keys(merged).length) writeLayout(merged);
+}
+
+function readLayout() {
+  migrateLayoutIfNeeded();
+  return readLayoutRaw(LAYOUT_KEY);
 }
 
 function isMobileVizLayout() {
@@ -104,18 +137,35 @@ function initDraggableLiveBlocks() {
       };
 
       const onMove = (e) => move(e.clientX, e.clientY);
-      const onUp = () => {
-        document.removeEventListener("pointermove", onMove);
-        document.removeEventListener("pointerup", onUp);
-        const left = Number.parseFloat(el.style.left || "0");
-        const top = Number.parseFloat(el.style.top || "0");
+      const persistPosition = () => {
+        const nowRect = el.getBoundingClientRect();
+        const left = Math.min(
+          Math.max(0, nowRect.left - wrapRect.left),
+          Math.max(0, wrapRect.width - nowRect.width)
+        );
+        const top = Math.min(
+          Math.max(0, nowRect.top - wrapRect.top),
+          Math.max(0, wrapRect.height - nowRect.height)
+        );
+        el.style.left = `${left}px`;
+        el.style.top = `${top}px`;
+        el.style.right = "auto";
+        el.style.bottom = "auto";
         const map = readLayout();
         map[key] = { left, top };
         writeLayout(map);
       };
+      const finishDrag = () => {
+        document.removeEventListener("pointermove", onMove);
+        document.removeEventListener("pointerup", finishDrag);
+        document.removeEventListener("pointercancel", finishDrag);
+        persistPosition();
+      };
 
+      el.setPointerCapture?.(ev.pointerId);
       document.addEventListener("pointermove", onMove);
-      document.addEventListener("pointerup", onUp, { once: true });
+      document.addEventListener("pointerup", finishDrag, { once: true });
+      document.addEventListener("pointercancel", finishDrag, { once: true });
       ev.preventDefault();
     });
   }
